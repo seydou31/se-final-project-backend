@@ -87,3 +87,94 @@ If the distance is greater than the allowed threshold (e.g., 100 meters), the sy
   "message": "User is too far away from the event, and must get directions.",
   "newEvent": { ...eventData }
 }
+```
+
+---
+
+## 🚀 Installation & Setup
+
+### Prerequisites
+Before you begin, ensure you have the following installed:
+- **Node.js** (v14 or higher) - [Download here](https://nodejs.org/)
+- **MongoDB** (local or cloud instance) - [Download here](https://www.mongodb.com/try/download/community) or use [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+- **npm** or **yarn** package manager
+- **Git** for version control
+
+### Step 1: Clone the Repository
+```bash
+git clone https://github.com/seydou31/se_project_express.git
+cd se_project_express
+```
+
+### Step 2: Install Dependencies
+```bash
+npm install
+```
+
+### Step 3: Configure Environment Variables
+Create a `.env` file in the root directory and add the following variables:
+
+```env
+# Server Configuration
+PORT=3001
+NODE_ENV=development
+
+# MongoDB Configuration
+MONGO_URI=mongodb://localhost:27017/baequest
+# Or use MongoDB Atlas:
+# MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/baequest
+
+# JWT Secret (use a strong random string)
+JWT_SECRET=your_super_secure_jwt_secret_key_here
+JWT_EXPIRE=7d
+
+# CORS Configuration (frontend URL)
+CORS_ORIGIN=http://localhost:3000
+
+# Geolocation Settings
+MAX_CHECKIN_DISTANCE=100  # Distance in meters
+
+# Google Places API (optional)
+GOOGLE_PLACES_API_KEY=your_google_places_api_key_here
+```
+
+### Step 4: Set Up MongoDB
+**Option A: Local MongoDB**
+1. Start your local MongoDB server:
+   ```bash
+   mongod
+   ```
+
+**Option B: MongoDB Atlas (Cloud)**
+1. Create a free account at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+2. Create a new cluster
+3. Get your connection string and update `MONGO_URI` in `.env`
+
+### Step 5: Start the Development Server
+```bash
+npm run dev
+```
+
+The server should now be running at `http://localhost:3001`
+
+### Step 6: Verify Installation
+Test the API is running by visiting:
+```
+http://localhost:3001/api/events
+```
+
+Or use curl:
+```bash
+curl http://localhost:3001/api/events
+```
+
+---
+
+## 📝 Available Scripts
+
+- `npm start` - Start the production server
+- `npm run dev` - Start the development server with hot reload (nodemon)
+- `npm test` - Run test suite
+- `npm run lint` - Run ESLint for code quality checks
+
+---
