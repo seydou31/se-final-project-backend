@@ -4,67 +4,61 @@ const { fetchGooglePlaces } = require("./fetchGooglePlaces");
 module.exports.seedEvents = async () => {
   const now = new Date();
 
-  // Check for active events (not expired)
-  const activeCount = await event.countDocuments({ endTime: { $gt: now } });
+  // Always seed default events if they don't exist
+  await seedDefaultEvents();
 
-  if (activeCount === 0) {
-    console.log("No active events found, fetching from Google Places...");
+  // Always try to fetch Google Places events
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
 
-    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) {
+    console.error("GOOGLE_PLACES_API_KEY not set, skipping Google Places fetch");
+    return;
+  }
 
-    if (!apiKey) {
-      console.error("GOOGLE_PLACES_API_KEY not set, seeding with default events");
-      await seedDefaultEvents();
-      return;
-    }
+  console.log("Fetching events from Google Places...");
 
-    // Default location (Washington DC area)
-    const location = { lat: 38.9072, lng: -77.0369 };
-    const places = await fetchGooglePlaces(apiKey, location, 10000);
+  // Default location (Washington DC area)
+  const location = { lat: 38.9072, lng: -77.0369 };
+  const places = await fetchGooglePlaces(apiKey, location, 10000);
 
-    if (places.length === 0) {
-      console.log("No places from Google API, seeding with default events");
-      await seedDefaultEvents();
-      return;
-    }
+  if (places.length === 0) {
+    console.log("No places returned from Google API");
+    return;
+  }
 
-    // Create events from Google Places
-    const eventsToCreate = places.map((place) => {
-      const daysToAdd = Math.random() > 0.5 ? 0 : 1;
-      const startHour = 10 + Math.floor(Math.random() * 10);
+  // Create events from Google Places
+  const eventsToCreate = places.map((place) => {
+    const daysToAdd = Math.random() > 0.5 ? 0 : 1;
+    const startHour = 10 + Math.floor(Math.random() * 10);
 
-      const startDate = new Date(now);
-      startDate.setDate(startDate.getDate() + daysToAdd);
-      startDate.setHours(startHour, 0, 0, 0);
+    const startDate = new Date(now);
+    startDate.setDate(startDate.getDate() + daysToAdd);
+    startDate.setHours(startHour, 0, 0, 0);
 
-      const endDate = new Date(startDate);
-      endDate.setHours(startDate.getHours() + 3);
+    const endDate = new Date(startDate);
+    endDate.setHours(startDate.getHours() + 3);
 
-      return {
-        ...place,
-        date: startDate,
-        endTime: endDate,
-      };
+    return {
+      ...place,
+      date: startDate,
+      endTime: endDate,
+    };
+  });
+
+  // Insert only unique events (by googlePlaceId to avoid duplicates)
+  let createdCount = 0;
+  for (const eventData of eventsToCreate) {
+    const existing = await event.findOne({
+      googlePlaceId: eventData.googlePlaceId,
     });
 
-    // Insert only unique events (by location)
-    let createdCount = 0;
-    for (const eventData of eventsToCreate) {
-      const existing = await event.findOne({
-        "location.lat": eventData.location.lat,
-        "location.lng": eventData.location.lng,
-      });
-
-      if (!existing) {
-        await event.create(eventData);
-        createdCount++;
-      }
+    if (!existing) {
+      await event.create(eventData);
+      createdCount++;
     }
-
-    console.log(`✅ Created ${createdCount} events from Google Places!`);
-  } else {
-    console.log(`✅ Found ${activeCount} active events, skipping seed`);
   }
+
+  console.log(`✅ Created ${createdCount} new events from Google Places!`);
 };
 
 async function seedDefaultEvents() {
@@ -83,7 +77,7 @@ async function seedDefaultEvents() {
   const tomorrowEnd = new Date(tomorrow);
   tomorrowEnd.setHours(18, 0, 0, 0);
 
-  const events = [
+  const defaultEvents = [
     {
       title: "Coffee & Chill",
       date: today,
@@ -103,6 +97,17 @@ async function seedDefaultEvents() {
       location: { name: "Muir Woods Trail", lat: 38.897957, lng: -77.036560 },
     },
   ];
-  await event.insertMany(events);
-  console.log("✅ Default events seeded!");
+
+  let createdCount = 0;
+  for (const eventData of defaultEvents) {
+    const existing = await event.findOne({ title: eventData.title });
+    if (!existing) {
+      await event.create(eventData);
+      createdCount++;
+    }
+  }
+
+  if (createdCount > 0) {
+    console.log(`✅ Created ${createdCount} default events!`);
+  }
 }
