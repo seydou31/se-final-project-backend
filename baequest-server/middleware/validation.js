@@ -3,6 +3,14 @@ const { BadRequestError } = require("../utils/customErrors");
 
 // User validation schemas
 const createUserSchema = Joi.object({
+  name: Joi.string().min(2).max(30).required().messages({
+    "string.min": "Name must be at least 2 characters long",
+    "string.max": "Name must not exceed 30 characters",
+    "any.required": "Name is required",
+  }),
+  avatar: Joi.string().uri().optional().messages({
+    "string.uri": "Avatar must be a valid URL",
+  }),
   email: Joi.string().email().required().messages({
     "string.email": "Email must be a valid email address",
     "any.required": "Email is required",
