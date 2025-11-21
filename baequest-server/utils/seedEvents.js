@@ -100,7 +100,10 @@ async function seedDefaultEvents() {
 
   let createdCount = 0;
   for (const eventData of defaultEvents) {
-    const existing = await event.findOne({ title: eventData.title });
+    const existing = await event.findOne({
+      "location.lat": eventData.location.lat,
+      "location.lng": eventData.location.lng,
+    });
     if (!existing) {
       await event.create(eventData);
       createdCount++;
