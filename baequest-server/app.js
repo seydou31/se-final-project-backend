@@ -15,7 +15,7 @@ const event = require("./models/event");
 const profile = require("./models/profile");
 const errorHandler = require("./middleware/errorHandler");
 const logger = require("./utils/logger");
-const requestLogger = require("./middleware/requestLogger"); 
+const requestLogger = require("./middleware/requestLogger");
 
 
 const app = express();
@@ -23,7 +23,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000"],
+    origin: ["https://baequests.com"],
     methods: ["GET", "POST"],
     credentials: true,
   },
