@@ -20,7 +20,7 @@ module.exports.createUser = async (req, res, next) => {
     }
 
     const hash = await bcrypt.hash(password, 10);
-    const newUser = await user.create({ name, avatar, email, password: hash });
+    const newUser = await user.create({ email, password: hash });
     const userObject = newUser.toObject();
     delete userObject.password;
     return res.status(201).send(userObject);
