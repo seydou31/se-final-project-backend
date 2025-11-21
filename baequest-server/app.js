@@ -88,7 +88,7 @@ setInterval(async () => {
 
 
 
-app.use(cors({ origin: "http://baequests.com", credentials: true }));
+app.use(cors({ origin: "https://baequests.com", credentials: true }));
 app.use(cookieParser());
 app.use(helmet());
 app.use(requestLogger);
