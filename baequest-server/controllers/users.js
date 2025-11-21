@@ -54,8 +54,8 @@ module.exports.login = async (req, res, next) => {
       .cookie("jwt", token, {
         maxAge: 3600000 * 24 * 7,
         httpOnly: true,
-        secure: true,
-        sameSite: "None",
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
       })
       .json({
         message: "Login successful",
@@ -72,8 +72,8 @@ module.exports.login = async (req, res, next) => {
 module.exports.logout = (req, res) => {
   res.clearCookie("jwt", {
     httpOnly: true,
-    secure: true,
-    sameSite: "None",
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
   });
 
   return res.status(200).json({ message: "Logout successful" });
