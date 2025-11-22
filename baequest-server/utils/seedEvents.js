@@ -1,32 +1,46 @@
 const event = require("../models/event");
 const { fetchGooglePlaces } = require("./fetchGooglePlaces");
+const logger = require("./logger");
 
-module.exports.seedEvents = async () => {
+// Clean up expired events and re-seed if needed
+async function cleanupAndReseed() {
   const now = new Date();
 
-  // Always seed default events if they don't exist
-  await seedDefaultEvents();
+  // Delete all expired events
+  const deleteResult = await event.deleteMany({ endTime: { $lte: now } });
+  if (deleteResult.deletedCount > 0) {
+    logger.info(`Cleaned up ${deleteResult.deletedCount} expired events`);
+  }
 
-  // Always try to fetch Google Places events
+  // Check if there are any active events left
+  const activeCount = await event.countDocuments({ endTime: { $gt: now } });
+
+  if (activeCount === 0) {
+    logger.info("No active events found, re-seeding...");
+    await seedDefaultEvents();
+    await seedGooglePlacesEvents();
+  }
+}
+
+async function seedGooglePlacesEvents() {
+  const now = new Date();
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
 
   if (!apiKey) {
-    console.error("GOOGLE_PLACES_API_KEY not set, skipping Google Places fetch");
+    logger.warn("GOOGLE_PLACES_API_KEY not set, skipping Google Places fetch");
     return;
   }
 
-  console.log("Fetching events from Google Places...");
+  logger.info("Fetching events from Google Places...");
 
-  // Default location (Washington DC area)
   const location = { lat: 38.9072, lng: -77.0369 };
   const places = await fetchGooglePlaces(apiKey, location, 10000);
 
   if (places.length === 0) {
-    console.log("No places returned from Google API");
+    logger.info("No places returned from Google API");
     return;
   }
 
-  // Create events from Google Places
   const eventsToCreate = places.map((place) => {
     const daysToAdd = Math.random() > 0.5 ? 0 : 1;
     const startHour = 10 + Math.floor(Math.random() * 10);
@@ -45,7 +59,6 @@ module.exports.seedEvents = async () => {
     };
   });
 
-  // Insert only unique events (by googlePlaceId to avoid duplicates)
   let createdCount = 0;
   for (const eventData of eventsToCreate) {
     const existing = await event.findOne({
@@ -58,7 +71,24 @@ module.exports.seedEvents = async () => {
     }
   }
 
-  console.log(`✅ Created ${createdCount} new events from Google Places!`);
+  logger.info(`Created ${createdCount} new events from Google Places`);
+}
+
+module.exports.seedEvents = async () => {
+  // Initial seeding
+  await seedDefaultEvents();
+  await seedGooglePlacesEvents();
+
+  // Set up periodic cleanup and re-seed (every 5 minutes)
+  setInterval(async () => {
+    try {
+      await cleanupAndReseed();
+    } catch (err) {
+      logger.error("Error during cleanup and reseed:", err);
+    }
+  }, 5 * 60 * 1000);
+
+  logger.info("Event auto-refresh scheduled (every 5 minutes)");
 };
 
 async function seedDefaultEvents() {
