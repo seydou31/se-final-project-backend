@@ -75,7 +75,14 @@ async function seedGooglePlacesEvents() {
 }
 
 module.exports.seedEvents = async () => {
-  // Initial seeding
+  // Clean up expired events first
+  const now = new Date();
+  const deleteResult = await event.deleteMany({ endTime: { $lte: now } });
+  if (deleteResult.deletedCount > 0) {
+    logger.info(`Cleaned up ${deleteResult.deletedCount} expired events on startup`);
+  }
+
+  // Seed events
   await seedDefaultEvents();
   await seedGooglePlacesEvents();
 
