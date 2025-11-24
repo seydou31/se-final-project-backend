@@ -56,7 +56,6 @@ module.exports.login = async (req, res, next) => {
         httpOnly: true,
         secure: true,
         sameSite: "None",
-        domain: ".baequests.com",
       })
       .json({
         message: "Login successful",
@@ -75,7 +74,6 @@ module.exports.logout = (req, res) => {
     httpOnly: true,
     secure: true,
     sameSite: "None",
-    domain: ".baequests.com",
   });
 
   return res.status(200).json({ message: "Logout successful" });
