@@ -11,7 +11,7 @@ const {
 } = require("../utils/customErrors");
 
 module.exports.createUser = async (req, res, next) => {
-  const { name, avatar, email, password } = req.body;
+  const {email, password } = req.body;
 
   try {
     const existing = await user.findOne({ email });
@@ -20,7 +20,7 @@ module.exports.createUser = async (req, res, next) => {
     }
 
     const hash = await bcrypt.hash(password, 10);
-    const newUser = await user.create({ name, avatar, email, password: hash });
+    const newUser = await user.create({email, password: hash });
     const userObject = newUser.toObject();
     delete userObject.password;
     return res.status(201).send(userObject);
@@ -29,18 +29,6 @@ module.exports.createUser = async (req, res, next) => {
   }
 };
 
-module.exports.getUser = async (req, res, next) => {
-  const { userId } = req.params;
-
-  try {
-    const foundUser = await user.findById(userId).orFail(() => {
-      throw new NotFoundError("User not found");
-    });
-    res.status(200).send(foundUser);
-  } catch (err) {
-    next(err);
-  }
-};
 
 module.exports.login = async (req, res, next) => {
   const { email, password } = req.body;
