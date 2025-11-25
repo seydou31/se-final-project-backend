@@ -24,7 +24,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: ["https://baequests.com"],
+    origin: ["https://baequests.com", "http://localhost:3000"],
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -89,7 +89,7 @@ setInterval(async () => {
 
 
 
-app.use(cors({ origin: "https://baequests.com", credentials: true }));
+app.use(cors({ origin: ["https://baequests.com", "http://localhost:3000"], credentials: true }));
 app.use(cookieParser());
 app.use(helmet());
 app.use(requestLogger);
