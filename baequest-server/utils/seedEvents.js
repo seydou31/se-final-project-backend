@@ -1,78 +1,5 @@
 const event = require("../models/event");
-const { fetchGooglePlaces } = require("./fetchGooglePlaces");
 const logger = require("./logger");
-
-// Clean up expired events and re-seed if needed
-async function cleanupAndReseed() {
-  const now = new Date();
-
-  // Delete all expired events
-  const deleteResult = await event.deleteMany({ endTime: { $lte: now } });
-  if (deleteResult.deletedCount > 0) {
-    logger.info(`Cleaned up ${deleteResult.deletedCount} expired events`);
-  }
-
-  // Check if there are any active events left
-  const activeCount = await event.countDocuments({ endTime: { $gt: now } });
-
-  if (activeCount === 0) {
-    logger.info("No active events found, re-seeding...");
-    await seedDefaultEvents();
-    await seedGooglePlacesEvents();
-  }
-}
-
-async function seedGooglePlacesEvents() {
-  const now = new Date();
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-
-  if (!apiKey) {
-    logger.warn("GOOGLE_PLACES_API_KEY not set, skipping Google Places fetch");
-    return;
-  }
-
-  logger.info("Fetching events from Google Places...");
-
-  const location = { lat: 38.9072, lng: -77.0369 };
-  const places = await fetchGooglePlaces(apiKey, location, 10000);
-
-  if (places.length === 0) {
-    logger.info("No places returned from Google API");
-    return;
-  }
-
-  const eventsToCreate = places.map((place) => {
-    const daysToAdd = Math.random() > 0.5 ? 0 : 1;
-    const startHour = 10 + Math.floor(Math.random() * 10);
-
-    const startDate = new Date(now);
-    startDate.setDate(startDate.getDate() + daysToAdd);
-    startDate.setHours(startHour, 0, 0, 0);
-
-    const endDate = new Date(startDate);
-    endDate.setHours(startDate.getHours() + 3);
-
-    return {
-      ...place,
-      date: startDate,
-      endTime: endDate,
-    };
-  });
-
-  let createdCount = 0;
-  for (const eventData of eventsToCreate) {
-    const existing = await event.findOne({
-      googlePlaceId: eventData.googlePlaceId,
-    });
-
-    if (!existing) {
-      await event.create(eventData);
-      createdCount++;
-    }
-  }
-
-  logger.info(`Created ${createdCount} new events from Google Places`);
-}
 
 module.exports.seedEvents = async () => {
   // Clean up expired events first
@@ -82,20 +9,23 @@ module.exports.seedEvents = async () => {
     logger.info(`Cleaned up ${deleteResult.deletedCount} expired events on startup`);
   }
 
-  // Seed events
+  // Seed only default events (users will fetch Google Places via API)
   await seedDefaultEvents();
-  await seedGooglePlacesEvents();
 
-  // Set up periodic cleanup and re-seed (every 5 minutes)
+  // Set up periodic cleanup (every 5 minutes)
   setInterval(async () => {
     try {
-      await cleanupAndReseed();
+      const now = new Date();
+      const deleteResult = await event.deleteMany({ endTime: { $lte: now } });
+      if (deleteResult.deletedCount > 0) {
+        logger.info(`Cleaned up ${deleteResult.deletedCount} expired events`);
+      }
     } catch (err) {
-      logger.error("Error during cleanup and reseed:", err);
+      logger.error("Error during cleanup:", err);
     }
   }, 5 * 60 * 1000);
 
-  logger.info("Event auto-refresh scheduled (every 5 minutes)");
+  logger.info("Event auto-cleanup scheduled (every 5 minutes)");
 };
 
 async function seedDefaultEvents() {
