@@ -1,17 +1,15 @@
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 const user = require("../models/user");
 const profile = require("../models/profile");
-const bcrypt = require("bcryptjs");
 const SECRET = require("../utils/config");
 const {
-  BadRequestError,
   UnauthorizedError,
-  NotFoundError,
   ConflictError,
 } = require("../utils/customErrors");
 
 module.exports.createUser = async (req, res, next) => {
-  const {email, password } = req.body;
+  const { email, password } = req.body;
 
   try {
     const existing = await user.findOne({ email });
@@ -20,12 +18,12 @@ module.exports.createUser = async (req, res, next) => {
     }
 
     const hash = await bcrypt.hash(password, 10);
-    const newUser = await user.create({email, password: hash });
+    const newUser = await user.create({ email, password: hash });
     const userObject = newUser.toObject();
     delete userObject.password;
     return res.status(201).send(userObject);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 

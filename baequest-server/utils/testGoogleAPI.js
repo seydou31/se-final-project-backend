@@ -1,3 +1,4 @@
+/* eslint-disable no-console, prefer-template */
 require("dotenv").config();
 const { fetchGooglePlaces } = require("./fetchGooglePlaces");
 

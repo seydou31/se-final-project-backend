@@ -1,6 +1,6 @@
-const SECRET = require('../utils/config')
-
 const jwt = require('jsonwebtoken');
+const SECRET = require('../utils/config');
+const logger = require('../utils/logger');
 
 const handleAuthError = (res) => {
   res
@@ -8,12 +8,10 @@ const handleAuthError = (res) => {
     .send({ message: 'Authorization Error' });
 };
 
-
 module.exports = (req, res, next) => {
-
   const token = req.cookies.jwt;
 
- if (!token) {
+  if (!token) {
     return handleAuthError(res);
   }
 
@@ -22,11 +20,11 @@ module.exports = (req, res, next) => {
   try {
     payload = jwt.verify(token, SECRET.JWT_SECRET);
   } catch (err) {
-    console.error(err)
+    logger.error('JWT verification failed:', err);
     return handleAuthError(res);
   }
 
   req.user = payload;
 
-  next();
+  return next();
 };

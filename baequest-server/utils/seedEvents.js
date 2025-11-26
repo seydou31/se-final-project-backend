@@ -1,33 +1,6 @@
 const event = require("../models/event");
 const logger = require("./logger");
 
-module.exports.seedEvents = async () => {
-  // Clean up expired events first
-  const now = new Date();
-  const deleteResult = await event.deleteMany({ endTime: { $lte: now } });
-  if (deleteResult.deletedCount > 0) {
-    logger.info(`Cleaned up ${deleteResult.deletedCount} expired events on startup`);
-  }
-
-  // Seed only default events (users will fetch Google Places via API)
-  await seedDefaultEvents();
-
-  // Set up periodic cleanup (every 5 minutes)
-  setInterval(async () => {
-    try {
-      const now = new Date();
-      const deleteResult = await event.deleteMany({ endTime: { $lte: now } });
-      if (deleteResult.deletedCount > 0) {
-        logger.info(`Cleaned up ${deleteResult.deletedCount} expired events`);
-      }
-    } catch (err) {
-      logger.error("Error during cleanup:", err);
-    }
-  }, 5 * 60 * 1000);
-
-  logger.info("Event auto-cleanup scheduled (every 5 minutes)");
-};
-
 async function seedDefaultEvents() {
   const now = new Date();
 
@@ -65,19 +38,49 @@ async function seedDefaultEvents() {
     },
   ];
 
-  let createdCount = 0;
-  for (const eventData of defaultEvents) {
-    const existing = await event.findOne({
-      "location.lat": eventData.location.lat,
-      "location.lng": eventData.location.lng,
-    });
-    if (!existing) {
-      await event.create(eventData);
-      createdCount++;
-    }
-  }
+  const createdEvents = await Promise.all(
+    defaultEvents.map(async (eventData) => {
+      const existing = await event.findOne({
+        "location.lat": eventData.location.lat,
+        "location.lng": eventData.location.lng,
+      });
+      if (!existing) {
+        await event.create(eventData);
+        return true;
+      }
+      return false;
+    })
+  );
+
+  const createdCount = createdEvents.filter((created) => created).length;
 
   if (createdCount > 0) {
-    console.log(`✅ Created ${createdCount} default events!`);
+    logger.info(`Created ${createdCount} default events!`);
   }
 }
+
+module.exports.seedEvents = async () => {
+  // Clean up expired events first
+  const now = new Date();
+  const deleteResult = await event.deleteMany({ endTime: { $lte: now } });
+  if (deleteResult.deletedCount > 0) {
+    logger.info(`Cleaned up ${deleteResult.deletedCount} expired events on startup`);
+  }
+
+  // Seed only default events (users will fetch Google Places via API)
+  await seedDefaultEvents();
+
+  // Set up periodic cleanup (every 5 minutes)
+  setInterval(async () => {
+    try {
+      const expiredDeleteResult = await event.deleteMany({ endTime: { $lte: new Date() } });
+      if (expiredDeleteResult.deletedCount > 0) {
+        logger.info(`Cleaned up ${expiredDeleteResult.deletedCount} expired events`);
+      }
+    } catch (err) {
+      logger.error("Error during cleanup:", err);
+    }
+  }, 5 * 60 * 1000);
+
+  logger.info("Event auto-cleanup scheduled (every 5 minutes)");
+};

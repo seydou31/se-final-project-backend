@@ -1,3 +1,4 @@
+/* eslint-disable no-console, no-restricted-syntax, no-await-in-loop, no-unused-vars */
 require("dotenv").config();
 const mongoose = require("mongoose");
 const event = require("../models/event");

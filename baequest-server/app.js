@@ -1,21 +1,23 @@
 require("dotenv").config();
+
+const http = require("http");
 const cors = require("cors");
-const { PORT = 3001 } = process.env;
 const express = require("express");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
+const { Server } = require("socket.io");
 const { seedEvents } = require("./utils/seedEvents");
 const mainRoute = require("./routes/index");
 const STATUS = require("./utils/errors");
-const http = require("http");
-const { Server } = require("socket.io");
 const event = require("./models/event");
 const profile = require("./models/profile");
 const errorHandler = require("./middleware/errorHandler");
 const logger = require("./utils/logger");
 const requestLogger = require("./middleware/requestLogger");
+
+const { PORT = 3001 } = process.env;
 
 
 const app = express();
@@ -60,7 +62,7 @@ setInterval(async () => {
       }
     });
 
-    for (const expiredEvent of justExpired) {
+    await Promise.all(justExpired.map(async (expiredEvent) => {
       logger.info(`Event expired: ${expiredEvent.title} (${expiredEvent._id})`);
 
       io.emit("event-expired", {
@@ -71,7 +73,7 @@ setInterval(async () => {
         "location.eventId": expiredEvent._id
       });
 
-      for (const userProfile of usersAtEvent) {
+      await Promise.all(usersAtEvent.map(async (userProfile) => {
         await profile.findByIdAndUpdate(userProfile._id, {
           $unset: { "location.eventId": "" }
         });
@@ -80,8 +82,8 @@ setInterval(async () => {
           message: "This event has ended",
           eventId: expiredEvent._id
         });
-      }
-    }
+      }));
+    }));
   } catch (err) {
     logger.error("Error checking expired events:", err);
   }

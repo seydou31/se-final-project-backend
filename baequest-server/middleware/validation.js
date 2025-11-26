@@ -125,17 +125,15 @@ const fetchGoogleEventsSchema = Joi.object({
 });
 
 // Validation middleware factory
-const validate = (schema, property = "body") => {
-  return (req, res, next) => {
-    const { error } = schema.validate(req[property], { abortEarly: false });
+const validate = (schema, property = "body") => (req, res, next) => {
+  const { error } = schema.validate(req[property], { abortEarly: false });
 
-    if (error) {
-      const errorMessages = error.details.map((detail) => detail.message).join(", ");
-      return next(new BadRequestError(errorMessages));
-    }
+  if (error) {
+    const errorMessages = error.details.map((detail) => detail.message).join(", ");
+    return next(new BadRequestError(errorMessages));
+  }
 
-    next();
-  };
+  return next();
 };
 
 module.exports = {

@@ -1,3 +1,4 @@
+/* eslint-disable max-classes-per-file */
 // Custom error classes for consistent error handling
 
 class BadRequestError extends Error {

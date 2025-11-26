@@ -1,6 +1,6 @@
+const mongoose = require("mongoose");
 const event = require("../models/event");
 const profile = require("../models/profile");
-const mongoose = require("mongoose");
 const { fetchGooglePlaces } = require("../utils/fetchGooglePlaces");
 const logger = require("../utils/logger");
 const {
@@ -61,9 +61,9 @@ module.exports.checkin = async (req, res, next) => {
       eventId,
     });
 
-    res.status(201).send(newProfile);
+    return res.status(201).send(newProfile);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -117,7 +117,7 @@ module.exports.fetchAndCreateEvents = async (req, res, next) => {
     }
 
     const now = new Date();
-    const eventsToCreate = places.map((place, index) => {
+    const eventsToCreate = places.map((place) => {
       const daysToAdd = Math.random() > 0.5 ? 0 : 1;
       const startHour = 10 + Math.floor(Math.random() * 10);
 
@@ -135,19 +135,21 @@ module.exports.fetchAndCreateEvents = async (req, res, next) => {
       };
     });
 
-    const savedEvents = [];
-    for (const eventData of eventsToCreate) {
-      const existing = await event.findOne({
-        "location.lat": eventData.location.lat,
-        "location.lng": eventData.location.lng,
-        date: eventData.date,
-      });
+    const savedEvents = await Promise.all(
+      eventsToCreate.map(async (eventData) => {
+        const existing = await event.findOne({
+          "location.lat": eventData.location.lat,
+          "location.lng": eventData.location.lng,
+          date: eventData.date,
+        });
 
-      if (!existing) {
-        const newEvent = await event.create(eventData);
-        savedEvents.push(newEvent);
-      }
-    }
+        if (!existing) {
+          const newEvent = await event.create(eventData);
+          return newEvent;
+        }
+        return null;
+      })
+    ).then((results) => results.filter((e) => e !== null));
 
     logger.info(`Created ${savedEvents.length} new events from Google Places`);
 

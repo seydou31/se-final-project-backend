@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
-const validator = require("validator");
-const possibleInterests = require('../constants/interests')
+const possibleInterests = require('../constants/interests');
+
 const profile = new mongoose.Schema({
   name: {
     type: String,
@@ -31,7 +31,7 @@ const profile = new mongoose.Schema({
     default: [],
 
     validate: {
-      validator: function (arr) {
+      validator(arr) {
         const max3 = arr.length > 0 && arr.length <= 3;
 
         const isInPossibleInterests = arr.every((word) =>
