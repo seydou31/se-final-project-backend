@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const event = require("../models/event");
 const profile = require("../models/profile");
 const { fetchGooglePlaces } = require("../utils/fetchGooglePlaces");
+const STATE_COORDINATES = require("../constants/stateCoordinates");
 const logger = require("../utils/logger");
 const {
   BadRequestError,
@@ -9,14 +10,45 @@ const {
   InternalServerError,
 } = require("../utils/customErrors");
 
+// Helper function to get state from coordinates using Google Geocoding API
+const getStateFromCoordinates = async (lat, lng, apiKey) => {
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.results && data.results[0]) {
+      const addressComponents = data.results[0].address_components;
+      const stateComponent = addressComponents.find(
+        component => component.types.includes('administrative_area_level_1')
+      );
+      return stateComponent ? stateComponent.long_name : null;
+    }
+    return null;
+  } catch (error) {
+    logger.error('Geocoding error:', error);
+    return null;
+  }
+};
+
 module.exports.events = async (req, res, next) => {
   const now = new Date();
+  const { state } = req.query;
 
   try {
-    const data = await event.find({ endTime: { $gt: now } }).orFail(() => {
+    // Build query filter
+    const filter = { endTime: { $gt: now } };
+
+    // Add state filter if provided
+    if (state) {
+      filter.state = state;
+    }
+
+    const data = await event.find(filter).orFail(() => {
       throw new NotFoundError("No event found");
     });
-    logger.info(`Found ${data.length} active events`);
+
+    logger.info(`Found ${data.length} active events${state ? ` in ${state}` : ''}`);
     res.status(200).send(data);
   } catch (err) {
     next(err);
@@ -107,8 +139,18 @@ module.exports.fetchAndCreateEvents = async (req, res, next) => {
       throw new InternalServerError("Google API key not configured");
     }
 
-    const { lat = 38.9072, lng = -77.0369, radius = 10000 } = req.body;
-    const searchLocation = { lat, lng };
+    const { state, radius = 10000 } = req.body;
+    let searchLocation;
+
+    // If state is provided, use state coordinates; otherwise use default (DC)
+    if (state && STATE_COORDINATES[state]) {
+      searchLocation = STATE_COORDINATES[state];
+      logger.info(`Fetching events for state: ${state} at coordinates: ${searchLocation.lat}, ${searchLocation.lng}`);
+    } else {
+      // Default to Washington DC
+      searchLocation = { lat: 38.9072, lng: -77.0369 };
+      logger.info(`No state provided, using default location (Washington DC)`);
+    }
 
     const places = await fetchGooglePlaces(apiKey, searchLocation, radius);
 
@@ -117,7 +159,10 @@ module.exports.fetchAndCreateEvents = async (req, res, next) => {
     }
 
     const now = new Date();
-    const eventsToCreate = places.map((place) => {
+    const eventsToCreate = [];
+
+    // Process each place and get its state
+    for (const place of places) {
       const daysToAdd = Math.random() > 0.5 ? 0 : 1;
       const startHour = 10 + Math.floor(Math.random() * 10);
 
@@ -128,12 +173,20 @@ module.exports.fetchAndCreateEvents = async (req, res, next) => {
       const endDate = new Date(startDate);
       endDate.setHours(startDate.getHours() + 2);
 
-      return {
+      // Get state from coordinates
+      const detectedState = await getStateFromCoordinates(
+        place.location.lat,
+        place.location.lng,
+        apiKey
+      );
+
+      eventsToCreate.push({
         ...place,
+        state: detectedState,
         date: startDate,
         endTime: endDate,
-      };
-    });
+      });
+    }
 
     const savedEvents = await Promise.all(
       eventsToCreate.map(async (eventData) => {
@@ -145,6 +198,7 @@ module.exports.fetchAndCreateEvents = async (req, res, next) => {
 
         if (!existing) {
           const newEvent = await event.create(eventData);
+          logger.info(`Created event: ${newEvent.title} in ${newEvent.state || 'Unknown'}`);
           return newEvent;
         }
         return null;

@@ -10,6 +10,7 @@ const eventSchema = new mongoose.Schema({
     lat: Number,
     lng: Number,
   },
+  state: { type: String }, // US state name for filtering
   date: { type: Date, required: true },
    endTime: { type: Date, required: true },
   category: String, // optional: "coffee", "music", etc.
