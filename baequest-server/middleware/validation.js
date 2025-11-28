@@ -110,6 +110,9 @@ const checkoutSchema = Joi.object({
 });
 
 const fetchGoogleEventsSchema = Joi.object({
+  state: Joi.string().optional().allow("").messages({
+    "string.base": "State must be a string",
+  }),
   lat: Joi.number().min(-90).max(90).optional().messages({
     "number.min": "Latitude must be between -90 and 90",
     "number.max": "Latitude must be between -90 and 90",

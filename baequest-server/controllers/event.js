@@ -143,13 +143,13 @@ module.exports.fetchAndCreateEvents = async (req, res, next) => {
     let searchLocation;
 
     // If state is provided, use state coordinates; otherwise use default (DC)
-    if (state && STATE_COORDINATES[state]) {
+    if (state && state.trim() !== "" && STATE_COORDINATES[state]) {
       searchLocation = STATE_COORDINATES[state];
       logger.info(`Fetching events for state: ${state} at coordinates: ${searchLocation.lat}, ${searchLocation.lng}`);
     } else {
       // Default to Washington DC
       searchLocation = { lat: 38.9072, lng: -77.0369 };
-      logger.info(`No state provided, using default location (Washington DC)`);
+      logger.info(`No state provided (received: "${state}"), using default location (Washington DC)`);
     }
 
     const places = await fetchGooglePlaces(apiKey, searchLocation, radius);
@@ -188,6 +188,8 @@ module.exports.fetchAndCreateEvents = async (req, res, next) => {
       });
     }
 
+    logger.info(`Attempting to save ${eventsToCreate.length} events to database...`);
+
     const savedEvents = await Promise.all(
       eventsToCreate.map(async (eventData) => {
         const existing = await event.findOne({
@@ -197,15 +199,18 @@ module.exports.fetchAndCreateEvents = async (req, res, next) => {
         });
 
         if (!existing) {
+          logger.info(`Saving new event: ${eventData.title} with state: ${eventData.state}`);
           const newEvent = await event.create(eventData);
-          logger.info(`Created event: ${newEvent.title} in ${newEvent.state || 'Unknown'}`);
+          logger.info(`✓ Successfully saved event ${newEvent._id}: ${newEvent.title} in ${newEvent.state || 'Unknown'}`);
           return newEvent;
+        } else {
+          logger.info(`Event already exists: ${eventData.title}`);
         }
         return null;
       })
     ).then((results) => results.filter((e) => e !== null));
 
-    logger.info(`Created ${savedEvents.length} new events from Google Places`);
+    logger.info(`✓ Created ${savedEvents.length} new events from Google Places`);
 
     res.status(201).json({
       message: `Successfully created ${savedEvents.length} events`,
