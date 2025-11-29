@@ -5,6 +5,7 @@ const {
   login,
   logout,
   getUsersAtEvent,
+  deleteUser
 } = require("../controllers/users");
 const {events, checkin, eventCheckout, fetchAndCreateEvents} = require('../controllers/event');
 const auth = require('../middleware/auth');
@@ -26,4 +27,5 @@ router.post('/checkin', auth, validate(checkinSchema), checkin);
 router.get('/otherUsers', auth, getUsersAtEvent);
 router.post("/checkout", auth, validate(checkoutSchema), eventCheckout);
 router.post('/fetch-google-events', auth, validate(fetchGoogleEventsSchema), fetchAndCreateEvents);
+router.delete('/deleteUser', auth, deleteUser);
 module.exports = router;

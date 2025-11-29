@@ -55,4 +55,13 @@ module.exports.updateProfile = async (req, res, next) => {
   }
 };
 
- 
+ module.exports.deleteProfile = async(req, res, next ) => {
+   const userId = req.user._id;
+   try{
+         await profile.findOneAndDelete({owner : userId}).orFail(() => {
+       throw new NotFoundError("profile not found")});
+       res.status(200).json({ message: "profile deleted successfully" });
+   } catch(err) {
+     next(err);
+   }
+ }

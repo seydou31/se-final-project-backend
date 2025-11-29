@@ -4,8 +4,8 @@ const user = require("../models/user");
 const profile = require("../models/profile");
 const SECRET = require("../utils/config");
 const {
-  UnauthorizedError,
-  ConflictError,
+  UnauthorizedError, NotFoundError,
+  ConflictError
 } = require("../utils/customErrors");
 
 module.exports.createUser = async (req, res, next) => {
@@ -80,3 +80,14 @@ module.exports.getUsersAtEvent = async (req, res, next) => {
     next(err);
   }
 };
+
+module.exports.deleteUser = async(req, res, next ) => {
+  const userId = req.user._id;
+  try{
+        await user.findByIdAndDelete(userId).orFail(() => {
+      throw new NotFoundError("user not found")});
+      res.status(200).json({ message: "User deleted successfully" });
+  } catch(err) {
+    next(err);
+  }
+}
