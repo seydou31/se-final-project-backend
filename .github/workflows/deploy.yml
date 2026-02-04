@@ -51,11 +51,37 @@ jobs:
           echo "Key written. Size: $(wc -c < /tmp/deploy_key) bytes"
           echo "Tarball size: $(ls -lh backend.tar | awk '{print $5}')"
 
+      - name: Diagnose SSH data transfer
+        run: |
+          SSH="ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}"
+          {
+            echo "=== Test 1: echo ==="
+            $SSH "echo hello_from_remote; whoami; cat /etc/ssh/sshd_config | grep -i subsystem; cat /etc/ssh/sshd_config | grep -i allowusers; cat /etc/ssh/sshd_config | grep -i 'Max'; uname -a" 2>&1 || echo "EXIT: $?"
+            echo "=== Test 2: small stdin pipe ==="
+            echo "test_payload" | $SSH "cat" 2>&1 || echo "EXIT: $?"
+            echo "=== Test 3: small file write ==="
+            echo "test_payload" | $SSH "cat > /tmp/test_payload && cat /tmp/test_payload && rm /tmp/test_payload" 2>&1 || echo "EXIT: $?"
+            echo "=== Test 4: 1MB data transfer ==="
+            dd if=/dev/urandom bs=1M count=1 2>/dev/null | $SSH "wc -c" 2>&1 || echo "EXIT: $?"
+            echo "=== Tarball info ==="
+            ls -lh backend.tar
+          } > /tmp/ssh_diag.txt 2>&1
+          cat /tmp/ssh_diag.txt
+          # Don't fail the step — continue to upload artifact
+          true
+
+      - name: Upload diagnostic artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ssh-diagnostic
+          path: /tmp/ssh_diag.txt
+
       - name: Upload image via SSH pipe
         run: |
           cat backend.tar | ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
             ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} \
-            "cat > /tmp/backend.tar"
+            "cat > /tmp/backend.tar && ls -la /tmp/backend.tar"
 
       - name: Remote deploy
         run: |
