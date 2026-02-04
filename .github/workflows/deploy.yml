@@ -37,9 +37,24 @@ jobs:
         with:
           context: ./baequest-server
           tags: baequest-backend:latest
+          load: true
 
       - name: Save image to tarball
-        run: docker save baequest-backend:latest -o backend.tar
+        run: |
+          docker save baequest-backend:latest -o backend.tar
+          ls -lh backend.tar
+
+      - name: Test SSH connectivity
+        run: |
+          echo "${{ secrets.GC_SSH_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          echo "Key file size: $(wc -c < /tmp/deploy_key) bytes"
+          head -1 /tmp/deploy_key
+          tail -1 /tmp/deploy_key
+          ssh -v -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} \
+            echo "SSH OK" 2>&1 || true
+          rm -f /tmp/deploy_key
 
       - name: SCP image to Google Cloud VM
         uses: appleboy/scp-action@v1
