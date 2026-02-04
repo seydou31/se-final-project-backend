@@ -51,24 +51,19 @@ jobs:
           echo "Key written. Size: $(wc -c < /tmp/deploy_key) bytes"
           echo "Tarball size: $(ls -lh backend.tar | awk '{print $5}')"
 
-      - name: Test SSH echo
+      - name: Upload image via SSH pipe
         run: |
-          ssh -v -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+          cat backend.tar | ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
             ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} \
-            "echo hello && whoami && ls /tmp/" 2>&1
-
-      - name: Test SCP upload
-        run: |
-          scp -v -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
-            backend.tar ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}:/tmp/backend.tar 2>&1
+            "cat > /tmp/backend.tar"
 
       - name: Remote deploy
         run: |
           ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
             ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} \
             "docker load -i /tmp/backend.tar && \
-             docker stop baequest-backend || true && \
-             docker rm baequest-backend || true && \
+             (docker stop baequest-backend || true) && \
+             (docker rm baequest-backend || true) && \
              docker run -d --name baequest-backend -p 3001:3001 --restart=unless-stopped \
                --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
                -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
