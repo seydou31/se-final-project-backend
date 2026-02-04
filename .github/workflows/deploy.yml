@@ -44,25 +44,38 @@ jobs:
           docker save baequest-backend:latest -o backend.tar
           ls -lh backend.tar
 
-      - name: SCP and deploy to Google Cloud VM
+      - name: Write deploy key
         run: |
           echo "${{ secrets.GC_SSH_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
-          scp -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
-            backend.tar ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}:/tmp/backend.tar
+          echo "Key written. Size: $(wc -c < /tmp/deploy_key) bytes"
+          echo "Tarball size: $(ls -lh backend.tar | awk '{print $5}')"
+
+      - name: Test SSH echo
+        run: |
+          ssh -v -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} \
+            "echo hello && whoami && ls /tmp/" 2>&1
+
+      - name: Test SCP upload
+        run: |
+          scp -v -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            backend.tar ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}:/tmp/backend.tar 2>&1
+
+      - name: Remote deploy
+        run: |
           ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
-            ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} << 'DEPLOY'
-          docker load -i /tmp/backend.tar
-          docker stop baequest-backend || true
-          docker rm baequest-backend || true
-          docker run -d \
-            --name baequest-backend \
-            -p 3001:3001 \
-            --restart=unless-stopped \
-            --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
-            -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
-            -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
-            baequest-backend:latest
-          rm -f /tmp/backend.tar
-          DEPLOY
-          rm -f /tmp/deploy_key
+            ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} \
+            "docker load -i /tmp/backend.tar && \
+             docker stop baequest-backend || true && \
+             docker rm baequest-backend || true && \
+             docker run -d --name baequest-backend -p 3001:3001 --restart=unless-stopped \
+               --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
+               -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
+               -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
+               baequest-backend:latest && \
+             rm -f /tmp/backend.tar"
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/deploy_key
