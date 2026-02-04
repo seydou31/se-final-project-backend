@@ -100,7 +100,6 @@ jobs:
       - name: Cleanup release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: always()
         run: |
           if [ -n "$RELEASE_ID" ]; then
             curl -sX DELETE \
