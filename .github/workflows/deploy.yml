@@ -44,43 +44,25 @@ jobs:
           docker save baequest-backend:latest -o backend.tar
           ls -lh backend.tar
 
-      - name: Test SSH connectivity
+      - name: SCP and deploy to Google Cloud VM
         run: |
           echo "${{ secrets.GC_SSH_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
-          echo "Key file size: $(wc -c < /tmp/deploy_key) bytes"
-          head -1 /tmp/deploy_key
-          tail -1 /tmp/deploy_key
-          ssh -v -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
-            ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} \
-            echo "SSH OK" 2>&1 || true
+          scp -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            backend.tar ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}:/tmp/backend.tar
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} << 'DEPLOY'
+          docker load -i /tmp/backend.tar
+          docker stop baequest-backend || true
+          docker rm baequest-backend || true
+          docker run -d \
+            --name baequest-backend \
+            -p 3001:3001 \
+            --restart=unless-stopped \
+            --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
+            -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
+            -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
+            baequest-backend:latest
+          rm -f /tmp/backend.tar
+          DEPLOY
           rm -f /tmp/deploy_key
-
-      - name: SCP image to Google Cloud VM
-        uses: appleboy/scp-action@v1
-        with:
-          host: ${{ secrets.GC_SERVER_HOST }}
-          username: ${{ secrets.GC_SERVER_USER }}
-          key: ${{ secrets.GC_SSH_KEY }}
-          source: backend.tar
-          target: /tmp/
-
-      - name: Load image and restart container
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.GC_SERVER_HOST }}
-          username: ${{ secrets.GC_SERVER_USER }}
-          key: ${{ secrets.GC_SSH_KEY }}
-          script: |
-            docker load -i /tmp/backend.tar
-            docker stop baequest-backend || true
-            docker rm baequest-backend || true
-            docker run -d \
-              --name baequest-backend \
-              -p 3001:3001 \
-              --restart=unless-stopped \
-              --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
-              -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
-              -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
-              baequest-backend:latest
-            rm -f /tmp/backend.tar
