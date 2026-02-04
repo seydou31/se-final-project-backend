@@ -44,22 +44,31 @@ jobs:
           echo "${{ secrets.GC_SSH_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
 
-      - name: Stream image and deploy
+      - name: Verify image
         run: |
-          SSH="ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}"
-          # Stream docker image directly to remote docker load (no intermediate file)
-          docker save baequest-backend:latest | $SSH "docker load"
-          # Run deploy commands
-          $SSH "
-            docker stop baequest-backend || true
-            docker rm baequest-backend || true
-            docker run -d --name baequest-backend -p 3001:3001 --restart=unless-stopped \
-              --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
-              -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
-              -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
-              baequest-backend:latest
-            echo 'Deploy complete'
-          "
+          echo "=== All images ==="
+          docker images
+          echo "=== Save test ==="
+          docker save baequest-backend:latest -o /tmp/image_test.tar
+          ls -lh /tmp/image_test.tar
+
+      - name: Test SSH connection
+        run: |
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} \
+            "echo ssh_ok && docker info --format '{{.ServerVersion}}' && df -h /tmp"
+
+      - name: Stream image to remote
+        run: |
+          docker save baequest-backend:latest | ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} \
+            "docker load"
+
+      - name: Start container
+        run: |
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} \
+            "docker stop baequest-backend; docker rm baequest-backend; docker run -d --name baequest-backend -p 3001:3001 --restart=unless-stopped --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs baequest-backend:latest"
 
       - name: Cleanup
         if: always()
