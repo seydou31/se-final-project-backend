@@ -46,47 +46,53 @@ jobs:
 
       - name: Transfer and deploy image
         run: |
-          SSH_OPTS="-i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes -o ServerAliveInterval=10"
+          set +e
           HOST="${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}"
+          SSH="ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes -o ServerAliveInterval=10"
 
-          # Save image to file first
+          # Save image
           docker save baequest-backend:latest -o /tmp/image.tar
-          echo "Image saved: $(ls -lh /tmp/image.tar)"
+          IMG_SIZE=$(ls -lh /tmp/image.tar | awk '{print $5}')
+          echo "::notice::Image tarball size: $IMG_SIZE"
 
-          # Approach 1: stdin redirect (not pipe — avoids pipefail)
-          echo "=== Trying stdin redirect ==="
-          if ssh $SSH_OPTS "$HOST" "docker load" < /tmp/image.tar; then
-            echo "Approach 1 (stdin redirect) succeeded"
+          # Test 1: SSH echo (should work — baseline)
+          RESULT=$($SSH "$HOST" "echo OK" 2>&1)
+          echo "::notice::SSH echo test: exit=$? output=$RESULT"
+
+          # Test 2: SSH receiving data FROM remote (10MB)
+          RESULT=$($SSH "$HOST" "dd if=/dev/urandom bs=1M count=1 2>/dev/null | wc -c" 2>&1)
+          echo "::notice::SSH receive 1MB from remote: exit=$? bytes=$RESULT"
+
+          # Test 3: SSH sending 1 byte TO remote
+          RESULT=$(echo "X" | $SSH "$HOST" "wc -c" 2>&1)
+          echo "::notice::SSH send 1 byte: exit=$? output=$RESULT"
+
+          # Test 4: SSH sending 1MB TO remote
+          RESULT=$(dd if=/dev/urandom bs=1M count=1 2>/dev/null | $SSH "$HOST" "wc -c" 2>&1)
+          echo "::notice::SSH send 1MB: exit=$? output=$RESULT"
+
+          # Test 5: stdin redirect with 1MB
+          dd if=/dev/urandom bs=1M count=1 of=/tmp/test1mb 2>/dev/null
+          RESULT=$($SSH "$HOST" "wc -c" < /tmp/test1mb 2>&1)
+          echo "::notice::SSH stdin-redirect 1MB: exit=$? output=$RESULT"
+
+          # Test 6: actual docker load via stdin redirect
+          RESULT=$($SSH "$HOST" "docker load" < /tmp/image.tar 2>&1)
+          echo "::notice::SSH docker load stdin: exit=$? output=$RESULT"
+
+          # Test 7: SFTP
+          RESULT=$(sftp -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes "$HOST" <<< "put /tmp/image.tar /tmp/backend.tar" 2>&1)
+          echo "::notice::SFTP put: exit=$? output=$RESULT"
+
+          # If SFTP worked, try docker load from file
+          if [ -n "$RESULT" ] && echo "$RESULT" | grep -qi "error\|fail" ; then
+            echo "::error::SFTP failed: $RESULT"
           else
-            echo "Approach 1 failed, trying SFTP..."
-            # Approach 2: SFTP upload then load
-            sftp $SSH_OPTS "$HOST" <<< "put /tmp/image.tar /tmp/backend.tar" && \
-              ssh $SSH_OPTS "$HOST" "docker load -i /tmp/backend.tar && rm -f /tmp/backend.tar" || {
-              echo "Approach 2 (SFTP) also failed, trying SSH pipe with pipefail off..."
-              # Approach 3: pipe with pipefail disabled
-              set +o pipefail
-              cat /tmp/image.tar | ssh $SSH_OPTS "$HOST" "docker load"
-              PIPE_EXITS=(${PIPESTATUS[@]})
-              echo "Pipe exits: cat=${PIPE_EXITS[0]} ssh=${PIPE_EXITS[1]}"
-              if [ "${PIPE_EXITS[1]}" -ne 0 ]; then
-                echo "All transfer approaches failed"
-                exit 1
-              fi
-            }
+            RESULT=$($SSH "$HOST" "docker load -i /tmp/backend.tar 2>&1 && rm -f /tmp/backend.tar" 2>&1)
+            echo "::notice::docker load from SFTP file: exit=$? output=$RESULT"
           fi
 
-          # Deploy
-          ssh $SSH_OPTS "$HOST" "
-            docker stop baequest-backend || true
-            docker rm baequest-backend || true
-            docker run -d --name baequest-backend -p 3001:3001 --restart=unless-stopped \
-              --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
-              -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
-              -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
-              baequest-backend:latest
-            echo Deploy complete
-          "
-          rm -f /tmp/image.tar
+          rm -f /tmp/image.tar /tmp/test1mb
 
       - name: Cleanup
         if: always()
