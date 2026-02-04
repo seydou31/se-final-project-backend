@@ -63,8 +63,8 @@ jobs:
               --name baequest-backend \
               -p 3001:3001 \
               --restart=unless-stopped \
-              --env-file /home/badiakaseydou/backend/.env \
-              -v /home/badiakaseydou/backend/uploads:/app/uploads \
-              -v /home/badiakaseydou/backend/logs:/app/logs \
+              --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
+              -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
+              -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
               baequest-backend:latest
             rm -f /tmp/backend.tar
