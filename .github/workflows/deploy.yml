@@ -39,63 +39,27 @@ jobs:
           tags: baequest-backend:latest
           load: true
 
-      - name: Save image to tarball
-        run: |
-          docker save baequest-backend:latest -o backend.tar
-          ls -lh backend.tar
-
       - name: Write deploy key
         run: |
           echo "${{ secrets.GC_SSH_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
-          echo "Key written. Size: $(wc -c < /tmp/deploy_key) bytes"
-          echo "Tarball size: $(ls -lh backend.tar | awk '{print $5}')"
 
-      - name: Diagnose SSH data transfer
+      - name: Stream image and deploy
         run: |
           SSH="ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}"
-          {
-            echo "=== Test 1: echo ==="
-            $SSH "echo hello_from_remote; whoami; cat /etc/ssh/sshd_config | grep -i subsystem; cat /etc/ssh/sshd_config | grep -i allowusers; cat /etc/ssh/sshd_config | grep -i 'Max'; uname -a" 2>&1 || echo "EXIT: $?"
-            echo "=== Test 2: small stdin pipe ==="
-            echo "test_payload" | $SSH "cat" 2>&1 || echo "EXIT: $?"
-            echo "=== Test 3: small file write ==="
-            echo "test_payload" | $SSH "cat > /tmp/test_payload && cat /tmp/test_payload && rm /tmp/test_payload" 2>&1 || echo "EXIT: $?"
-            echo "=== Test 4: 1MB data transfer ==="
-            dd if=/dev/urandom bs=1M count=1 2>/dev/null | $SSH "wc -c" 2>&1 || echo "EXIT: $?"
-            echo "=== Tarball info ==="
-            ls -lh backend.tar
-          } > /tmp/ssh_diag.txt 2>&1
-          cat /tmp/ssh_diag.txt
-          # Don't fail the step — continue to upload artifact
-          true
-
-      - name: Upload diagnostic artifact
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ssh-diagnostic
-          path: /tmp/ssh_diag.txt
-
-      - name: Upload image via SSH pipe
-        run: |
-          cat backend.tar | ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
-            ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} \
-            "cat > /tmp/backend.tar && ls -la /tmp/backend.tar"
-
-      - name: Remote deploy
-        run: |
-          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
-            ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} \
-            "docker load -i /tmp/backend.tar && \
-             (docker stop baequest-backend || true) && \
-             (docker rm baequest-backend || true) && \
-             docker run -d --name baequest-backend -p 3001:3001 --restart=unless-stopped \
-               --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
-               -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
-               -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
-               baequest-backend:latest && \
-             rm -f /tmp/backend.tar"
+          # Stream docker image directly to remote docker load (no intermediate file)
+          docker save baequest-backend:latest | $SSH "docker load"
+          # Run deploy commands
+          $SSH "
+            docker stop baequest-backend || true
+            docker rm baequest-backend || true
+            docker run -d --name baequest-backend -p 3001:3001 --restart=unless-stopped \
+              --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
+              -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
+              -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
+              baequest-backend:latest
+            echo 'Deploy complete'
+          "
 
       - name: Cleanup
         if: always()
