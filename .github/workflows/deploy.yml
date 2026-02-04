@@ -45,36 +45,65 @@ jobs:
           chmod 600 /tmp/deploy_key
 
       - name: Transfer and deploy image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPO: ${{ github.repository }}
         run: |
+          set +e
           HOST="${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}"
+          SSH="ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes"
+          LOG=""
+          log() { LOG="${LOG}${1}\n"; echo "$1"; }
 
-          # Save image to file
+          # Save image
           docker save baequest-backend:latest -o /tmp/image.tar
-          ls -lh /tmp/image.tar
+          log "Image size: $(ls -lh /tmp/image.tar | awk '{print $5}')"
 
-          # Start HTTP server serving /tmp on port 8888
-          cd /tmp && python3 -m http.server 8888 &
-          HTTP_PID=$!
-          sleep 1
+          # Test 1: SSH echo
+          OUT=$($SSH "$HOST" "echo OK" 2>&1); RC=$?
+          log "T1 ssh-echo: exit=$RC out=$OUT"
 
-          # SSH with reverse tunnel: remote port 8888 maps to local 8888
-          # VM curls localhost:8888/image.tar through the tunnel, pipes to docker load
-          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
-            -R 8888:127.0.0.1:8888 "$HOST" \
-            "curl -s http://127.0.0.1:8888/image.tar | docker load && \
-             (docker stop baequest-backend || true) && \
-             (docker rm baequest-backend || true) && \
-             docker run -d --name baequest-backend -p 3001:3001 --restart=unless-stopped \
-               --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
-               -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
-               -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
-               baequest-backend:latest"
-          SSH_EXIT=$?
+          # Test 2: SSH key fingerprint
+          OUT=$(ssh-keygen -l -f /tmp/deploy_key 2>&1); RC=$?
+          log "T2 key-fp: exit=$RC out=$OUT"
 
-          kill $HTTP_PID 2>/dev/null
-          rm -f /tmp/image.tar
+          # Test 3: SSH with stdin redirect
+          OUT=$($SSH "$HOST" "cat | wc -c" < /tmp/image.tar 2>&1); RC=$?
+          log "T3 stdin-redirect: exit=$RC bytes=$OUT"
 
-          exit $SSH_EXIT
+          # Test 4: Pipe
+          OUT=$(cat /tmp/image.tar | $SSH "$HOST" "cat | wc -c" 2>&1); RC=$?
+          log "T4 pipe: exit=$RC bytes=$OUT"
+
+          # Test 5: native scp
+          scp -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes /tmp/image.tar "$HOST":/tmp/backend.tar 2>/tmp/scp_err.txt; RC=$?
+          log "T5 native-scp: exit=$RC err=$(cat /tmp/scp_err.txt)"
+
+          # Test 6: sftp
+          OUT=$(echo "put /tmp/image.tar /tmp/backend.tar" | sftp -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes "$HOST" 2>&1); RC=$?
+          log "T6 sftp: exit=$RC out=$OUT"
+
+          # Test 7: sshd config from remote
+          OUT=$($SSH "$HOST" "cat /etc/ssh/sshd_config 2>/dev/null || echo no-sshd-config" 2>&1); RC=$?
+          log "T7 sshd-config: exit=$RC"
+          log "$OUT"
+
+          # Post results as a commit comment
+          ESCAPED=$(printf '%s' "$LOG" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+          curl -sX POST \
+            "https://api.github.com/repos/$GITHUB_REPO/commits/$GITHUB_SHA/comments" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"body\":\"SSH Diagnostic:\\n\\n\`\`\`\\n${ESCAPED}\\n\`\`\`\"}"
+
+          # If any transfer worked, do the deploy
+          if $SSH "$HOST" "test -f /tmp/backend.tar"; then
+            log "File exists on remote, deploying..."
+            $SSH "$HOST" "docker load -i /tmp/backend.tar && (docker stop baequest-backend || true) && (docker rm baequest-backend || true) && docker run -d --name baequest-backend -p 3001:3001 --restart=unless-stopped --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs baequest-backend:latest && rm -f /tmp/backend.tar"
+          fi
+
+          rm -f /tmp/image.tar /tmp/scp_err.txt
 
       - name: Cleanup
         if: always()
