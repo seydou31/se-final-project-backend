@@ -16,10 +16,13 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: baequest-server/package-lock.json
 
       - run: npm ci
+        working-directory: baequest-server
 
       - run: npm test
+        working-directory: baequest-server
 
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -32,7 +35,7 @@ jobs:
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./baequest-server
           tags: baequest-backend:latest
 
       - name: Save image to tarball
@@ -53,8 +56,6 @@ jobs:
           host: ${{ secrets.GC_SERVER_HOST }}
           username: ${{ secrets.GC_SERVER_USER }}
           key: ${{ secrets.GC_SSH_KEY }}
-          # Update the env-file path and volume mounts to match where
-          # your backend is checked out on the VM
           script: |
             docker load -i /tmp/backend.tar
             docker stop baequest-backend || true
