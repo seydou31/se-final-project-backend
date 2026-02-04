@@ -238,7 +238,7 @@ describe('Event Endpoints', () => {
           eventId: testEvent._id,
         });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
       expect(res.body.message).toMatch(/too far/i);
     });
 

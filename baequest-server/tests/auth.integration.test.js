@@ -10,6 +10,7 @@ const usersController = require('../controllers/users');
 const emailController = require('../controllers/emailVerification');
 const profileController = require('../controllers/profile');
 const auth = require('../middleware/auth');
+const { validate, createUserSchema } = require('../middleware/validation');
 const { sendVerificationEmail } = require('../utils/email');
 
 let mongoServer;
@@ -26,13 +27,20 @@ beforeAll(async () => {
   app.use(cookieParser());
 
   // Setup routes - full auth flow
-  app.post('/signup', usersController.createUser);
+  app.post('/signup', validate(createUserSchema), usersController.createUser);
   app.post('/signin', usersController.login);
   app.post('/logout', usersController.logout);
   app.post('/email-verification/send', emailController.sendVerification);
   app.post('/email-verification/verify', emailController.verifyEmail);
   app.post('/profile', auth, profileController.createProfile);
   app.get('/profile', auth, profileController.getProfile);
+
+  // Error handler
+  app.use((err, req, res, next) => {
+    const status = err.statusCode || 500;
+    const message = err.message || 'An error occurred';
+    res.status(status).json({ message });
+  });
 });
 
 afterAll(async () => {
@@ -123,7 +131,7 @@ describe('Complete Authentication Flow Integration Tests', () => {
         sexualOrientation: 'straight',
         profession: 'Software Engineer',
         bio: 'Test bio',
-        interests: ['coding', 'hiking'],
+        interests: ['travel', 'hiking'],
         convoStarter: 'What is your favorite programming language?'
       };
 
@@ -340,7 +348,7 @@ describe('Complete Authentication Flow Integration Tests', () => {
       const setCookieHeader = logoutResponse.headers['set-cookie'];
       expect(setCookieHeader).toBeDefined();
       const clearedCookie = setCookieHeader.find(c => c.startsWith('jwt='));
-      expect(clearedCookie).toContain('Max-Age=0'); // Cookie should be expired
+      expect(clearedCookie).toMatch(/Expires=Thu, 01 Jan 1970/); // Cookie should be expired
     });
   });
 });

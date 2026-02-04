@@ -115,6 +115,7 @@ describe('Authentication Endpoints', () => {
       await User.create({
         email: 'test@example.com',
         password: await bcrypt.hash('password123', 10),
+        isEmailVerified: true,
       });
     });
 

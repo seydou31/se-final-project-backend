@@ -88,7 +88,7 @@ module.exports.login = async (req, res, next) => {
         },
       });
   } catch (err) {
-    next(new BadRequestError(err.message));
+    next(new UnauthorizedError(err.message));
   }
 };
 
