@@ -1,15 +1,21 @@
 const profile = require("../models/profile");
 const logger = require("../utils/logger");
 const { NotFoundError } = require("../utils/customErrors");
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const fs = require('fs').promises;
+const path = require('path');
+const { isS3Configured } = require('../middleware/multer');
 
 module.exports.createProfile = async (req, res, next) => {
-  const { name, age, gender, bio, interests, convoStarter } = req.body;
+  const { name, age, gender, sexualOrientation, profession, bio, interests, convoStarter } = req.body;
 
   try {
     const newProfile = await profile.create({
       name,
       age,
       gender,
+      sexualOrientation,
+      profession,
       bio,
       interests,
       convoStarter,
@@ -34,13 +40,13 @@ module.exports.getProfile = async (req, res, next) => {
 };
 
 module.exports.updateProfile = async (req, res, next) => {
-  const { name, age, gender, bio, interests, convoStarter } = req.body;
+  const { name, age, gender, sexualOrientation, profession, bio, interests, convoStarter } = req.body;
 
   try {
     const updatedProfile = await profile
       .findOneAndUpdate(
         { owner: req.user._id },
-        { name, age, gender, bio, interests, convoStarter },
+        { name, age, gender, sexualOrientation, profession, bio, interests, convoStarter },
         {
           new: true,
           runValidators: true,
@@ -65,3 +71,84 @@ module.exports.updateProfile = async (req, res, next) => {
      next(err);
    }
  }
+
+module.exports.uploadProfilePicture = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    // File has been validated and optimized by middleware
+    // Now save to S3 or local disk
+    let profilePictureUrl;
+    const secureFilename = req.secureFilename;
+    const fileBuffer = req.file.buffer;
+
+    if (isS3Configured) {
+      // Upload to S3
+      const s3Client = new S3Client({
+        region: process.env.AWS_REGION || 'us-east-1',
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        },
+      });
+
+      const key = `profile-pictures/${secureFilename}`;
+
+      const uploadParams = {
+        Bucket: process.env.AWS_S3_BUCKET_NAME,
+        Key: key,
+        Body: fileBuffer,
+        ContentType: req.validatedFileType.mime,
+        Metadata: {
+          uploadedBy: req.user._id.toString(),
+          originalName: req.file.originalname,
+        },
+      };
+
+      await s3Client.send(new PutObjectCommand(uploadParams));
+
+      // Construct S3 URL
+      profilePictureUrl = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
+
+      logger.info(`Profile picture uploaded to S3: ${key}`);
+    } else {
+      // Save to local disk
+      const uploadDir = path.join(__dirname, '..', 'uploads', 'profile-pictures');
+
+      // Ensure directory exists
+      await fs.mkdir(uploadDir, { recursive: true });
+
+      const filePath = path.join(uploadDir, secureFilename);
+      await fs.writeFile(filePath, fileBuffer);
+
+      profilePictureUrl = `/uploads/profile-pictures/${secureFilename}`;
+
+      logger.info(`Profile picture saved locally: ${secureFilename}`);
+    }
+
+    // Update the user's profile with the new profile picture URL
+    const updatedProfile = await profile
+      .findOneAndUpdate(
+        { owner: req.user._id },
+        { profilePicture: profilePictureUrl },
+        { new: true, runValidators: true }
+      )
+      .orFail(() => {
+        throw new NotFoundError("Profile not found");
+      });
+
+    res.status(200).json({
+      message: "Profile picture uploaded successfully",
+      profilePicture: profilePictureUrl,
+      profile: updatedProfile,
+      storageType: isS3Configured ? 's3' : 'local',
+      fileSize: req.file.size,
+      mimeType: req.validatedFileType.mime
+    });
+  } catch (err) {
+    logger.error('Profile picture upload error:', err);
+    next(err);
+  }
+};

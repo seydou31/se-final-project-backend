@@ -14,11 +14,16 @@ const user = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
+    required: function() {
+      // Password is only required if googleId is not present
+      return !this.googleId;
+    },
     select: false,
     minlength: 8,
     validate: {
       validator(password) {
+        // Skip validation if password is not provided (Google OAuth user)
+        if (!password) return true;
         const passwordRegex =
           /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/;
         return passwordRegex.test(password);
@@ -26,6 +31,15 @@ const user = new mongoose.Schema({
       message:
         "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
     },
+  },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true, // Allows multiple null values
+  },
+  isEmailVerified: {
+    type: Boolean,
+    default: false,
   },
 });
 
@@ -37,9 +51,19 @@ user.statics.findUserByCredentials = function findUserByCredentials(email, passw
         return Promise.reject(new Error("Incorrect password or email"));
       }
 
+      // Check if user signed up with Google
+      if (foundUser.googleId && !foundUser.password) {
+        return Promise.reject(new Error("Please sign in with Google"));
+      }
+
       return bcrypt.compare(password, foundUser.password).then((matched) => {
         if (!matched) {
           return Promise.reject(new Error("Incorrect password or email"));
+        }
+
+        // Check if email is verified
+        if (!foundUser.isEmailVerified) {
+          return Promise.reject(new Error("Please verify your email address before logging in. Check your inbox for the verification link."));
         }
 
         return foundUser;

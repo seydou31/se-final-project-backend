@@ -1,7 +1,7 @@
 const STATUS = require("../utils/errors");
 const logger = require("../utils/logger");
 
-const errorHandler = (err, req, res) => {
+const errorHandler = (err, req, res, next) => {
   logger.error("Error caught by error handler:", {
     error: err.message,
     stack: err.stack,

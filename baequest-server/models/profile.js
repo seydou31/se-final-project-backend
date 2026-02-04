@@ -20,6 +20,17 @@ const profile = new mongoose.Schema({
     enum: ["male", "female"],
     required: true,
   },
+  sexualOrientation: {
+    type: String,
+    enum: ["straight", "gay", "bisexual"],
+    required: true,
+  },
+  profession: {
+    type: String,
+    minlength: 2,
+    maxlength: 50,
+    required: true,
+  },
   bio: {
     type: String,
     minlength: 6,
@@ -49,6 +60,10 @@ const profile = new mongoose.Schema({
     minlength: 6,
     maxlength: 160,
     required: true,
+  },
+  profilePicture: {
+    type: String,
+    default: null,
   },
    location: {
     lat: Number,

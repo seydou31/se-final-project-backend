@@ -1,39 +1,16 @@
 const mongoose = require("mongoose");
 const event = require("../models/event");
 const profile = require("../models/profile");
-const { fetchGooglePlaces } = require("../utils/fetchGooglePlaces");
-const STATE_COORDINATES = require("../constants/stateCoordinates");
 const logger = require("../utils/logger");
 const {
   BadRequestError,
   NotFoundError,
-  InternalServerError,
 } = require("../utils/customErrors");
-
-// Helper function to get state from coordinates using Google Geocoding API
-const getStateFromCoordinates = async (lat, lng, apiKey) => {
-  try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.results && data.results[0]) {
-      const addressComponents = data.results[0].address_components;
-      const stateComponent = addressComponents.find(
-        component => component.types.includes('administrative_area_level_1')
-      );
-      return stateComponent ? stateComponent.long_name : null;
-    }
-    return null;
-  } catch (error) {
-    logger.error('Geocoding error:', error);
-    return null;
-  }
-};
 
 module.exports.events = async (req, res, next) => {
   const now = new Date();
-  const { state } = req.query;
+  const { state, city } = req.query;
+  const userId = req.user._id; // Get current user's ID
 
   try {
     // Build query filter
@@ -44,12 +21,34 @@ module.exports.events = async (req, res, next) => {
       filter.state = state;
     }
 
-    const data = await event.find(filter).orFail(() => {
-      throw new NotFoundError("No event found");
+    // Add city filter if provided (case-insensitive)
+    if (city) {
+      filter.city = { $regex: new RegExp(`^${city}$`, 'i') };
+    }
+
+    const data = await event.find(filter);
+
+    // Add goingCount and isUserGoing to each event
+    const eventsWithCount = data.map(evt => {
+      const eventObj = evt.toObject();
+      const userIdString = userId.toString();
+      const isUserGoing = eventObj.usersGoing && eventObj.usersGoing.some(id => id.toString() === userIdString);
+
+      return {
+        ...eventObj,
+        goingCount: (eventObj.usersGoing && Array.isArray(eventObj.usersGoing)) ? eventObj.usersGoing.length : 0,
+        isUserGoing // Add flag indicating if current user is going
+      };
     });
 
-    logger.info(`Found ${data.length} active events${state ? ` in ${state}` : ''}`);
-    res.status(200).send(data);
+    const filterDescription = [
+      state ? `state: ${state}` : null,
+      city ? `city: ${city}` : null
+    ].filter(Boolean).join(', ');
+
+    logger.info(`Found ${data.length} active events${filterDescription ? ` with filters (${filterDescription})` : ''}`);
+    logger.info(`Sample event with count:`, eventsWithCount[0] ? { title: eventsWithCount[0].title, goingCount: eventsWithCount[0].goingCount, isUserGoing: eventsWithCount[0].isUserGoing } : 'No events');
+    res.status(200).send(eventsWithCount);
   } catch (err) {
     next(err);
   }
@@ -60,7 +59,7 @@ module.exports.checkin = async (req, res, next) => {
     const userId = req.user._id;
     const { lat, lng, eventId } = req.body;
 
-    if (!lat || !lng || !eventId) {
+    if (lat == null || lng == null || !eventId) {
       throw new BadRequestError("Missing required fields");
     }
 
@@ -71,10 +70,10 @@ module.exports.checkin = async (req, res, next) => {
 
     const latDiff = Math.abs(lat - newEvent.location.lat);
     const lngDiff = Math.abs(lng - newEvent.location.lng);
-    const maxDiff = 0.005;
+    const maxDiff = 0.03; // ~1.1 km or 0.7 miles
 
     if (latDiff > maxDiff || lngDiff > maxDiff) {
-      return res.status(200).json({
+      return res.status(400).json({
         newEvent,
         message: "User is too far away from the event, and must get directions.",
       });
@@ -85,9 +84,7 @@ module.exports.checkin = async (req, res, next) => {
       { location: { lat, lng, eventId, updatedAt: new Date() } },
       { new: true, upsert: true }
     );
-
     const io = req.app.get("io");
-    logger.info(`Emitting user-checked-in for event: ${eventId}, user: ${newProfile._id}`);
     io.to(`event_${eventId}`).emit("user-checked-in", {
       user: newProfile,
       eventId,
@@ -125,97 +122,112 @@ module.exports.eventCheckout = async (req, res, next) => {
       eventId,
     });
 
+    // Send feedback request email (don't block checkout if it fails)
+    try {
+      const feedbackController = require('./eventFeedback');
+      await feedbackController.createFeedbackRequest(
+        { user: req.user, body: { eventId } },
+        { status: () => ({ json: () => {} }) }, // Mock res
+        (err) => { if (err) logger.error('Failed to send feedback email:', err); }
+      );
+    } catch (feedbackErr) {
+      logger.error('Error sending feedback request:', feedbackErr);
+      // Don't fail checkout if feedback email fails
+    }
+
     res.status(200).json({ message: "Checked out successfully", newProfile });
   } catch (err) {
     next(err);
   }
 };
 
-module.exports.fetchAndCreateEvents = async (req, res, next) => {
+module.exports.markAsGoing = async (req, res, next) => {
   try {
-    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+    const userId = req.user._id;
+    const { eventId } = req.body;
 
-    if (!apiKey) {
-      throw new InternalServerError("Google API key not configured");
+    logger.info(`📥 Received markAsGoing request - userId: ${userId}, eventId: ${eventId}`);
+
+    if (!eventId) {
+      throw new BadRequestError("Missing eventId");
     }
 
-    const { state, radius = 10000 } = req.body;
-    let searchLocation;
-
-    // If state is provided, use state coordinates; otherwise use default (DC)
-    if (state && state.trim() !== "" && STATE_COORDINATES[state]) {
-      searchLocation = STATE_COORDINATES[state];
-      logger.info(`Fetching events for state: ${state} at coordinates: ${searchLocation.lat}, ${searchLocation.lng}`);
-    } else {
-      // Default to Washington DC
-      searchLocation = { lat: 38.9072, lng: -77.0369 };
-      logger.info(`No state provided (received: "${state}"), using default location (Washington DC)`);
+    const foundEvent = await event.findById(eventId);
+    if (!foundEvent) {
+      throw new NotFoundError("Event not found");
     }
 
-    const places = await fetchGooglePlaces(apiKey, searchLocation, radius);
+    logger.info(`📍 Found event: ${foundEvent.title} (${foundEvent._id})`);
+    logger.info(`Current usersGoing array:`, foundEvent.usersGoing);
 
-    if (places.length === 0) {
-      throw new NotFoundError("No places found");
-    }
+    // Check if user already marked as going (use string comparison for safety)
+    const userIdString = userId.toString();
+    const alreadyGoing = foundEvent.usersGoing.some(id => id.toString() === userIdString);
 
-    const now = new Date();
-    const eventsToCreate = [];
-
-    // Process each place and get its state
-    for (const place of places) {
-      const daysToAdd = Math.random() > 0.5 ? 0 : 1;
-      const startHour = 10 + Math.floor(Math.random() * 10);
-
-      const startDate = new Date(now);
-      startDate.setDate(startDate.getDate() + daysToAdd);
-      startDate.setHours(startHour, 0, 0, 0);
-
-      const endDate = new Date(startDate);
-      endDate.setHours(startDate.getHours() + 2);
-
-      // Get state from coordinates
-      const detectedState = await getStateFromCoordinates(
-        place.location.lat,
-        place.location.lng,
-        apiKey
-      );
-
-      eventsToCreate.push({
-        ...place,
-        state: detectedState,
-        date: startDate,
-        endTime: endDate,
+    if (alreadyGoing) {
+      logger.info(`User ${userId} already marked as going. Not adding duplicate.`);
+      return res.status(200).json({
+        message: "Already marked as going",
+        count: foundEvent.usersGoing.length,
       });
     }
 
-    logger.info(`Attempting to save ${eventsToCreate.length} events to database...`);
+    // Add user to usersGoing array
+    foundEvent.usersGoing.push(userId);
+    await foundEvent.save();
 
-    const savedEvents = await Promise.all(
-      eventsToCreate.map(async (eventData) => {
-        const existing = await event.findOne({
-          "location.lat": eventData.location.lat,
-          "location.lng": eventData.location.lng,
-          date: eventData.date,
-        });
+    logger.info(`Updated usersGoing array:`, foundEvent.usersGoing);
 
-        if (!existing) {
-          logger.info(`Saving new event: ${eventData.title} with state: ${eventData.state}`);
-          const newEvent = await event.create(eventData);
-          logger.info(`✓ Successfully saved event ${newEvent._id}: ${newEvent.title} in ${newEvent.state || 'Unknown'}`);
-          return newEvent;
-        } else {
-          logger.info(`Event already exists: ${eventData.title}`);
-        }
-        return null;
-      })
-    ).then((results) => results.filter((e) => e !== null));
+    // Emit real-time update to all clients viewing this event
+    const io = req.app.get("io");
+    logger.info(`User ${userId} marked as going to event ${eventId}. Total going: ${foundEvent.usersGoing.length}`);
 
-    logger.info(`✓ Created ${savedEvents.length} new events from Google Places`);
+    // Convert ObjectId to string to ensure consistent comparison on frontend
+    const eventIdString = foundEvent._id.toString();
+    logger.info(`Broadcasting event-going-updated to all clients with eventId: ${eventIdString} (type: ${typeof eventIdString}), count: ${foundEvent.usersGoing.length}`);
 
-    res.status(201).json({
-      message: `Successfully created ${savedEvents.length} events`,
-      events: savedEvents,
+    // Broadcast to ALL connected clients
+    io.emit("event-going-updated", {
+      eventId: eventIdString,
+      count: foundEvent.usersGoing.length,
+      userId: userId.toString(),
     });
+
+    logger.info('✅ Socket.IO event emitted successfully');
+
+    res.status(200).json({
+      message: "Marked as going",
+      count: foundEvent.usersGoing.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+module.exports.myEvents = async (req, res, next) => {
+  const now = new Date();
+  const userId = req.user._id;
+
+  try {
+    // Find events where the user is in the usersGoing array and event hasn't ended
+    const data = await event.find({
+      endTime: { $gt: now },
+      usersGoing: userId
+    });
+
+    // Add goingCount to each event
+    const eventsWithCount = data.map(evt => {
+      const eventObj = evt.toObject();
+      return {
+        ...eventObj,
+        goingCount: (eventObj.usersGoing && Array.isArray(eventObj.usersGoing)) ? eventObj.usersGoing.length : 0,
+        isUserGoing: true // All events here have the user going
+      };
+    });
+
+    logger.info(`Found ${data.length} events user is going to`);
+    res.status(200).send(eventsWithCount);
   } catch (err) {
     next(err);
   }

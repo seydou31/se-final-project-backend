@@ -26,7 +26,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: ["https://baequests.com", "http://localhost:3000"],
+    origin: ["https://baequests.com", "http://localhost:3000", "http://localhost:5173"],
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -35,7 +35,8 @@ const io = new Server(server, {
 app.set("io", io);
 
 io.on("connection", (socket) => {
-  logger.info(`User connected: ${socket.id}`);
+  logger.info(`✅ User connected: ${socket.id}`);
+  logger.info(`Total connected clients: ${io.engine.clientsCount}`);
 
   socket.on("join-event", ({ eventId }) => {
     socket.join(`event_${eventId}`);
@@ -48,7 +49,8 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    logger.info(`User disconnected: ${socket.id}`);
+    logger.info(`❌ User disconnected: ${socket.id}`);
+    logger.info(`Total connected clients: ${io.engine.clientsCount}`);
   });
 });
 
@@ -58,7 +60,7 @@ setInterval(async () => {
     const justExpired = await event.find({
       endTime: {
         $lte: now,
-        $gt: new Date(now.getTime() - 1000)
+        $gt: new Date(now.getTime() - 10000)
       }
     });
 
@@ -87,22 +89,29 @@ setInterval(async () => {
   } catch (err) {
     logger.error("Error checking expired events:", err);
   }
-}, 1000);
+}, 10000);
 
 
 
-app.use(cors({ origin: ["https://baequests.com", "http://localhost:3000"], credentials: true }));
+app.use(cors({ origin: ["https://baequests.com", "http://localhost:3000", "http://localhost:5173"], credentials: true }));
 app.use(cookieParser());
 app.use(helmet());
 app.use(requestLogger);
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 500, // Increased for development; adjust for production
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Trust proxy is enabled, so validate it
+  validate: { trustProxy: false }
 });
 app.use(limiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static files for uploaded images
+app.use('/uploads', express.static('uploads'));
 
 app.use("/", mainRoute);
 
@@ -114,8 +123,10 @@ app.use((req, res) => {
 
 app.use(errorHandler);
 
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/baequest-db";
+
 mongoose
-  .connect("mongodb://127.0.0.1:27017/baequest-db")
+  .connect(MONGODB_URI)
   .then(async () => {
     logger.info("Connected to MongoDB successfully");
     await seedEvents();
