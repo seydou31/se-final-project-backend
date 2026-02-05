@@ -74,46 +74,23 @@ jobs:
           HOST="${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}"
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/$RELEASE_TAG/image.tar"
 
-          {
-            echo "=== Pre-flight ==="
-            echo "Host: $HOST"
-            echo "RELEASE_TAG: $RELEASE_TAG"
-            echo "Download URL: $DOWNLOAD_URL"
-            ssh-keygen -l -f /tmp/deploy_key
-            echo "Local asset check: $(curl -s -o /dev/null -w '%{http_code}' -L "$DOWNLOAD_URL")"
-
-            echo "=== SSH connectivity test ==="
-            ssh -v -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
-              -o ConnectTimeout=10 "$HOST" \
-              "echo SSH_OK; uname -a; df -h /; docker ps -a; echo ENV_FILE_EXISTS=\$(test -f /home/badiakaseydou/se-final-project-backend/baequest-server/.env && echo yes || echo no)" 2>&1
-
-            echo "=== Deploy ==="
-            ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
-              -o ConnectTimeout=10 "$HOST" \
-              "echo Stopping old container; \
-               docker stop baequest-backend 2>/dev/null || true; \
-               docker rm baequest-backend 2>/dev/null || true; \
-               echo Freeing disk space; \
-               journalctl --vacuum-size=50M 2>/dev/null || true; \
-               docker system prune -af 2>/dev/null; \
-               df -h /; \
-               echo Streaming and loading image; \
-               curl -sL '$DOWNLOAD_URL' | docker load; \
-               LOAD_EXIT=\$?; \
-               echo LOAD_EXIT=\$LOAD_EXIT; \
-               if [ \$LOAD_EXIT -ne 0 ]; then echo LOAD_FAILED; df -h /; exit 1; fi; \
-               fuser -k 3001/tcp 2>/dev/null || true; \
-               echo Starting container; \
-               docker run -d --name baequest-backend --network host --restart=unless-stopped \
-                 --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
-                 -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
-                 -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
-                 baequest-backend:latest; \
-               echo RUN_EXIT=\$?; \
-               docker ps" 2>&1
-
-            echo "=== SSH exit code: \$? ==="
-          } | tee /tmp/deploy_debug.log
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            -o ConnectTimeout=10 "$HOST" \
+            "docker stop baequest-backend 2>/dev/null || true; \
+             docker rm baequest-backend 2>/dev/null || true; \
+             journalctl --vacuum-size=50M 2>/dev/null || true; \
+             docker system prune -af 2>/dev/null; \
+             curl -sL '$DOWNLOAD_URL' | docker load; \
+             LOAD_EXIT=\$?; \
+             if [ \$LOAD_EXIT -ne 0 ]; then echo LOAD_FAILED; df -h /; exit 1; fi; \
+             fuser -k 3001/tcp 2>/dev/null || true; \
+             docker run -d --name baequest-backend --network host --restart=unless-stopped \
+               --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
+               -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
+               -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
+               baequest-backend:latest; \
+             echo RUN_EXIT=\$?; \
+             docker ps" 2>&1 | tee /tmp/deploy_debug.log
 
           rm -f /tmp/deploy_key
 
