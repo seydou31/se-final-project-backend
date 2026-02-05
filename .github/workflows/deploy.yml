@@ -87,25 +87,30 @@ jobs:
               -o ConnectTimeout=10 "$HOST" \
               "echo SSH_OK; uname -a; df -h /; docker ps -a; echo ENV_FILE_EXISTS=\$(test -f /home/badiakaseydou/se-final-project-backend/baequest-server/.env && echo yes || echo no)" 2>&1
 
-            echo "=== Deploy (single attempt with trace) ==="
+            echo "=== Deploy ==="
             ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
               -o ConnectTimeout=10 "$HOST" \
-              "set -x; \
-               pkill -f 'node /home' || true; \
+              "echo Downloading image; \
                curl -sL -o /tmp/baequest_image.tar '$DOWNLOAD_URL'; \
                echo CURL_EXIT=\$?; \
                ls -la /tmp/baequest_image.tar; \
-               docker load < /tmp/baequest_image.tar; \
-               echo LOAD_EXIT=\$?; \
+               echo Stopping container; \
                docker stop baequest-backend || true; \
                docker rm baequest-backend || true; \
+               echo Loading image; \
+               docker load < /tmp/baequest_image.tar; \
+               echo LOAD_EXIT=\$?; \
+               echo Clearing port 3001; \
+               fuser -k 3001/tcp 2>/dev/null || true; \
+               echo Starting container; \
                docker run -d --name baequest-backend --network host --restart=unless-stopped \
                  --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
                  -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
                  -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
                  baequest-backend:latest; \
                echo RUN_EXIT=\$?; \
-               docker ps" 2>&1
+               docker ps; \
+               rm -f /tmp/baequest_image.tar" 2>&1
 
             echo "=== SSH exit code: \$? ==="
           } | tee /tmp/deploy_debug.log
