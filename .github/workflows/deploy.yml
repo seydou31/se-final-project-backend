@@ -77,10 +77,11 @@ jobs:
             echo "Attempt $attempt..."
             if ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
               -o ConnectTimeout=10 "$HOST" \
-              "curl -sL '$DOWNLOAD_URL' | docker load && \
+              "pkill -f 'node /home' || true; \
+               curl -sL '$DOWNLOAD_URL' | docker load && \
                (docker stop baequest-backend || true) && \
                (docker rm baequest-backend || true) && \
-               docker run -d --name baequest-backend -p 3001:3001 --restart=unless-stopped \
+               docker run -d --name baequest-backend --network host --restart=unless-stopped \
                  --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
                  -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
                  -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
