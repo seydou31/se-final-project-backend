@@ -95,18 +95,13 @@ jobs:
                docker rm baequest-backend 2>/dev/null || true; \
                echo Freeing disk space; \
                journalctl --vacuum-size=50M 2>/dev/null || true; \
-               docker system prune -f 2>/dev/null; \
+               docker system prune -af 2>/dev/null; \
                df -h /; \
-               echo Downloading image; \
-               curl -sL -o /tmp/baequest_image.tar '$DOWNLOAD_URL'; \
-               echo CURL_EXIT=\$?; \
-               ls -la /tmp/baequest_image.tar; \
-               echo Loading image; \
-               docker load < /tmp/baequest_image.tar; \
+               echo Streaming and loading image; \
+               curl -sL '$DOWNLOAD_URL' | docker load; \
                LOAD_EXIT=\$?; \
-               rm -f /tmp/baequest_image.tar; \
+               echo LOAD_EXIT=\$LOAD_EXIT; \
                if [ \$LOAD_EXIT -ne 0 ]; then echo LOAD_FAILED; df -h /; exit 1; fi; \
-               echo LOAD_EXIT=0; \
                fuser -k 3001/tcp 2>/dev/null || true; \
                echo Starting container; \
                docker run -d --name baequest-backend --network host --restart=unless-stopped \
