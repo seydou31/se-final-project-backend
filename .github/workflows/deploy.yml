@@ -57,11 +57,13 @@ jobs:
           echo "Release response: $RELEASE"
           RELEASE_ID=$(echo "$RELEASE" | node -e "const d=require('fs').readFileSync(0,'utf8');const id=JSON.parse(d).id;if(!id){console.error('Failed to create release');process.exit(1)}console.log(id)")
           echo "Release ID: $RELEASE_ID"
-          curl -sX POST \
+          UPLOAD_STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
             "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=image.tar" \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Content-Type: application/octet-stream" \
-            --data-binary @image.tar
+            --data-binary @image.tar)
+          echo "Upload HTTP status: $UPLOAD_STATUS"
+          [ "$UPLOAD_STATUS" = "201" ] || { echo "ERROR: Asset upload failed with status $UPLOAD_STATUS"; exit 1; }
           echo "RELEASE_ID=$RELEASE_ID" >> $GITHUB_ENV
           echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
 
@@ -71,6 +73,18 @@ jobs:
           chmod 600 /tmp/deploy_key
           HOST="${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}"
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/$RELEASE_TAG/image.tar"
+
+          # Diagnostics
+          echo "=== Deploy diagnostics ==="
+          echo "Host: $HOST"
+          echo "RELEASE_TAG: $RELEASE_TAG"
+          echo "Download URL: $DOWNLOAD_URL"
+          ssh-keygen -l -f /tmp/deploy_key 2>&1 || echo "Key validation failed"
+          echo "Asset reachable? $(curl -s -o /dev/null -w '%{http_code}' -L "$DOWNLOAD_URL")"
+          echo "=== SSH connectivity test ==="
+          ssh -v -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            -o ConnectTimeout=10 "$HOST" "echo SSH_OK" 2>&1 || echo "SSH connectivity test FAILED"
+          echo "=== Starting deploy ==="
 
           DEPLOYED=false
           for attempt in 1 2 3 4 5; do
