@@ -74,42 +74,57 @@ jobs:
           HOST="${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}"
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/$RELEASE_TAG/image.tar"
 
-          # Diagnostics
-          echo "=== Deploy diagnostics ==="
-          echo "Host: $HOST"
-          echo "RELEASE_TAG: $RELEASE_TAG"
-          echo "Download URL: $DOWNLOAD_URL"
-          ssh-keygen -l -f /tmp/deploy_key 2>&1 || echo "Key validation failed"
-          echo "Asset reachable? $(curl -s -o /dev/null -w '%{http_code}' -L "$DOWNLOAD_URL")"
-          echo "=== SSH connectivity test ==="
-          ssh -v -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
-            -o ConnectTimeout=10 "$HOST" "echo SSH_OK" 2>&1 || echo "SSH connectivity test FAILED"
-          echo "=== Starting deploy ==="
+          {
+            echo "=== Pre-flight ==="
+            echo "Host: $HOST"
+            echo "RELEASE_TAG: $RELEASE_TAG"
+            echo "Download URL: $DOWNLOAD_URL"
+            ssh-keygen -l -f /tmp/deploy_key
+            echo "Local asset check: $(curl -s -o /dev/null -w '%{http_code}' -L "$DOWNLOAD_URL")"
 
-          DEPLOYED=false
-          for attempt in 1 2 3 4 5; do
-            echo "Attempt $attempt..."
-            if ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            echo "=== SSH connectivity test ==="
+            ssh -v -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
               -o ConnectTimeout=10 "$HOST" \
-              "pkill -f 'node /home' || true; \
-               curl -sL '$DOWNLOAD_URL' | docker load && \
-               (docker stop baequest-backend || true) && \
-               (docker rm baequest-backend || true) && \
+              "echo SSH_OK; uname -a; df -h /; docker ps -a; echo ENV_FILE_EXISTS=\$(test -f /home/badiakaseydou/se-final-project-backend/baequest-server/.env && echo yes || echo no)" 2>&1
+
+            echo "=== Deploy (single attempt with trace) ==="
+            ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+              -o ConnectTimeout=10 "$HOST" \
+              "set -x; \
+               pkill -f 'node /home' || true; \
+               curl -sL -o /tmp/baequest_image.tar '$DOWNLOAD_URL'; \
+               echo CURL_EXIT=\$?; \
+               ls -la /tmp/baequest_image.tar; \
+               docker load < /tmp/baequest_image.tar; \
+               echo LOAD_EXIT=\$?; \
+               docker stop baequest-backend || true; \
+               docker rm baequest-backend || true; \
                docker run -d --name baequest-backend --network host --restart=unless-stopped \
                  --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
                  -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
                  -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
-                 baequest-backend:latest" 2>&1; then
-              echo "Deploy succeeded on attempt $attempt"
-              DEPLOYED=true
-              break
-            fi
-            echo "SSH failed, waiting 5s before retry..."
-            sleep 5
-          done
+                 baequest-backend:latest; \
+               echo RUN_EXIT=\$?; \
+               docker ps" 2>&1
+
+            echo "=== SSH exit code: \$? ==="
+          } | tee /tmp/deploy_debug.log
 
           rm -f /tmp/deploy_key
-          [ "$DEPLOYED" = true ] || exit 1
+
+          if grep -q "RUN_EXIT=0" /tmp/deploy_debug.log; then
+            echo "Deploy succeeded"
+          else
+            echo "Deploy failed - check artifact for details"
+            exit 1
+          fi
+
+      - name: Upload deploy debug log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-debug-log
+          path: /tmp/deploy_debug.log
 
       - name: Cleanup release
         env:
