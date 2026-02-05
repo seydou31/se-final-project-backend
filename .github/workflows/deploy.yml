@@ -122,6 +122,27 @@ jobs:
           rm -f /tmp/deploy_key
           [ "$DEPLOYED" = true ] || exit 1
 
+      - name: Post SSH diagnostics as issue
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "${{ secrets.GC_SSH_KEY }}" > /tmp/deploy_key_diag
+          chmod 600 /tmp/deploy_key_diag
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          KEY_TYPE=$(head -1 /tmp/deploy_key_diag)
+          KEY_FP=$(ssh-keygen -l -f /tmp/deploy_key_diag 2>&1)
+          KEY_LINES=$(wc -l < /tmp/deploy_key_diag)
+          TCP_TEST=$(timeout 3 bash -c "echo >/dev/tcp/${{ secrets.GC_SERVER_HOST }}/22" 2>&1 && echo "TCP OK" || echo "TCP FAIL")
+          SSH_TEST=$(ssh -v -i /tmp/deploy_key_diag -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=5 ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }} echo "auth ok" 2>&1)
+          rm -f /tmp/deploy_key_diag
+          BODY="## SSH Deploy Diagnostics (run ${{ github.run_number }})\n\n- **Runner IP:** ${RUNNER_IP}\n- **Target:** ${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}\n- **Key first line:** ${KEY_TYPE}\n- **Key fingerprint:** ${KEY_FP}\n- **Key line count:** ${KEY_LINES}\n- **TCP :22 test:** ${TCP_TEST}\n- **SSH verbose output:**\n\`\`\`\n${SSH_TEST}\n\`\`\`\n"
+          curl -sX POST \
+            "https://api.github.com/repos/${{ github.repository }}/issues" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"title\":\"[DEBUG] SSH deploy failure - run #${{ github.run_number }}\",\"body\":\"$(echo -e "$BODY" | sed 's/"/\\"/g')\"}"
+
       - name: Cleanup release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
