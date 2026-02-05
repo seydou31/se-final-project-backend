@@ -69,13 +69,39 @@ jobs:
           echo "${{ secrets.GC_SSH_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
           HOST="${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}"
-          # Public repo release asset — no auth needed to download
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/$RELEASE_TAG/image.tar"
 
-          # Retry SSH up to 5 times (sshd may drop connections under brute-force load)
+          # Diagnostics
+          echo "=== DIAG: Runner external IP ==="
+          curl -s https://api.ipify.org || echo "ipify failed"
+          echo ""
+          echo "=== DIAG: SSH target host ==="
+          echo "$HOST"
+          echo "=== DIAG: Key type ==="
+          head -1 /tmp/deploy_key
+          ssh-keygen -l -f /tmp/deploy_key 2>&1 || echo "keygen -l failed"
+          echo "=== DIAG: TCP connectivity test ==="
+          timeout 5 bash -c "echo >/dev/tcp/${{ secrets.GC_SERVER_HOST }}/22" 2>&1 && echo "TCP:22 OK" || echo "TCP:22 FAILED"
+          echo "=== END DIAG ==="
+
+          # First attempt with verbose SSH to capture the error
+          echo "Attempt 1 (verbose)..."
+          ssh -v -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            -o ConnectTimeout=10 "$HOST" \
+            "curl -sL '$DOWNLOAD_URL' | docker load && \
+             (docker stop baequest-backend || true) && \
+             (docker rm baequest-backend || true) && \
+             docker run -d --name baequest-backend -p 3001:3001 --restart=unless-stopped \
+               --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
+               -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
+               -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
+               baequest-backend:latest" 2>&1 && { echo "Deploy succeeded on attempt 1"; rm -f /tmp/deploy_key; exit 0; }
+
+          # Retry 4 more times non-verbose
           DEPLOYED=false
-          for attempt in 1 2 3 4 5; do
+          for attempt in 2 3 4 5; do
             echo "Attempt $attempt..."
+            sleep 5
             if ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
               -o ConnectTimeout=10 "$HOST" \
               "curl -sL '$DOWNLOAD_URL' | docker load && \
@@ -85,13 +111,12 @@ jobs:
                  --env-file /home/badiakaseydou/se-final-project-backend/baequest-server/.env \
                  -v /home/badiakaseydou/se-final-project-backend/baequest-server/uploads:/app/uploads \
                  -v /home/badiakaseydou/se-final-project-backend/baequest-server/logs:/app/logs \
-                 baequest-backend:latest"; then
+                 baequest-backend:latest" 2>&1; then
               echo "Deploy succeeded on attempt $attempt"
               DEPLOYED=true
               break
             fi
-            echo "SSH failed, waiting 5s before retry..."
-            sleep 5
+            echo "SSH failed attempt $attempt"
           done
 
           rm -f /tmp/deploy_key
