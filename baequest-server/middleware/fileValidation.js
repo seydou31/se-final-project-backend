@@ -26,18 +26,12 @@ const validateFileType = async (req, res, next) => {
     }
 
     // Debug logging to understand req.file structure
-    logger.info('File upload received:', JSON.stringify({
-      fieldname: req.file.fieldname,
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-      hasBuffer: !!req.file.buffer,
-      bufferLength: req.file.buffer ? req.file.buffer.length : 0,
-      hasPath: !!req.file.path,
-      path: req.file.path || null,
-      hasLocation: !!req.file.location,
-      encoding: req.file.encoding
-    }));
+    const fileKeys = Object.keys(req.file);
+    logger.info(`File upload - keys: [${fileKeys.join(', ')}]`);
+    logger.info(`File upload - fieldname: ${req.file.fieldname}, originalname: ${req.file.originalname}`);
+    logger.info(`File upload - mimetype: ${req.file.mimetype}, size: ${req.file.size}, encoding: ${req.file.encoding}`);
+    logger.info(`File upload - hasBuffer: ${!!req.file.buffer}, bufferType: ${typeof req.file.buffer}, bufferLength: ${req.file.buffer ? req.file.buffer.length : 'N/A'}`);
+    logger.info(`File upload - hasPath: ${!!req.file.path}, path: ${req.file.path || 'N/A'}`);
 
     // For S3 uploads, we need to validate before upload
     // For local uploads, file is already saved, so we validate then delete if invalid
