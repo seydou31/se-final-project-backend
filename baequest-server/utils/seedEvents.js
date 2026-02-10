@@ -139,10 +139,21 @@ async function seedDMVPlacesEvents() {
               ? `Join us at ${place.name}! ${place.types.slice(0, 3).join(", ")}`
               : `Join us at ${place.name}!`;
 
-          // Use photo if available, otherwise use a default placeholder
-          const photo = place.photos && place.photos.length > 0
-            ? place.photos[0].photo_url
-            : "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=800&q=80"; // Default event image
+          // Use placeholder images based on venue type (Google photo references expire)
+          const typeImages = {
+            bar: "https://images.unsplash.com/photo-1572116469696-31de0f17cc34?w=800&q=80",
+            night_club: "https://images.unsplash.com/photo-1566417713940-fe7c737a9ef2?w=800&q=80",
+            restaurant: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80",
+            cafe: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&q=80",
+            bowling_alley: "https://images.unsplash.com/photo-1545127398-14699f92334b?w=800&q=80",
+            movie_theater: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800&q=80",
+            museum: "https://images.unsplash.com/photo-1565060299509-453c4f3b3096?w=800&q=80",
+            art_gallery: "https://images.unsplash.com/photo-1531243269054-5ebf6f34081e?w=800&q=80",
+            amusement_park: "https://images.unsplash.com/photo-1513889961551-628c1e5e2ee9?w=800&q=80",
+            default: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=800&q=80"
+          };
+          const venueType = place.types?.[0] || "default";
+          const photo = typeImages[venueType] || typeImages.default;
 
           // Extract city from address first
           const city = extractCityFromAddress(place.address);
