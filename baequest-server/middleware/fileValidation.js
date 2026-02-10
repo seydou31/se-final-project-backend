@@ -25,14 +25,6 @@ const validateFileType = async (req, res, next) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Debug logging to understand req.file structure
-    const fileKeys = Object.keys(req.file);
-    logger.info(`File upload - keys: [${fileKeys.join(', ')}]`);
-    logger.info(`File upload - fieldname: ${req.file.fieldname}, originalname: ${req.file.originalname}`);
-    logger.info(`File upload - mimetype: ${req.file.mimetype}, size: ${req.file.size}, encoding: ${req.file.encoding}`);
-    logger.info(`File upload - hasBuffer: ${!!req.file.buffer}, bufferType: ${typeof req.file.buffer}, bufferLength: ${req.file.buffer ? req.file.buffer.length : 'N/A'}`);
-    logger.info(`File upload - hasPath: ${!!req.file.path}, path: ${req.file.path || 'N/A'}`);
-
     // For S3 uploads, we need to validate before upload
     // For local uploads, file is already saved, so we validate then delete if invalid
 
@@ -45,7 +37,6 @@ const validateFileType = async (req, res, next) => {
       // File is on disk (disk storage)
       fileBuffer = await fs.readFile(req.file.path);
     } else {
-      logger.error('File upload missing both buffer and path:', JSON.stringify(req.file));
       return res.status(500).json({ error: 'Unable to read uploaded file' });
     }
 
