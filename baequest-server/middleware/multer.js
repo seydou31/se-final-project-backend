@@ -84,6 +84,7 @@ const upload = multer({
 });
 
 // Export both the upload instance and storage config for later use
+// NOTE: Don't use 'storage' as property name - it would overwrite multer's internal storage!
 module.exports = upload;
 module.exports.isS3Configured = isS3Configured;
-module.exports.storage = storage;
+module.exports.s3Storage = storage;  // Renamed to avoid overwriting multer's internal .storage
