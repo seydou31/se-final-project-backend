@@ -67,7 +67,7 @@ function extractCityFromAddress(address) {
 async function seedDMVPlacesEvents() {
   try {
     // Read DMV places JSON file
-    const placesPath = path.join(__dirname, "../../../place finder/dmv-places.json");
+    const placesPath = path.join(__dirname, "../data/dmv-places.json");
     if (!fs.existsSync(placesPath)) {
       logger.info("DMV places file not found, skipping DMV events seeding");
       return;
