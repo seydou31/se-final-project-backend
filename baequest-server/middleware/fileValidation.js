@@ -25,6 +25,20 @@ const validateFileType = async (req, res, next) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
+    // Debug logging to understand req.file structure
+    logger.info('File upload received:', JSON.stringify({
+      fieldname: req.file.fieldname,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      hasBuffer: !!req.file.buffer,
+      bufferLength: req.file.buffer ? req.file.buffer.length : 0,
+      hasPath: !!req.file.path,
+      path: req.file.path || null,
+      hasLocation: !!req.file.location,
+      encoding: req.file.encoding
+    }));
+
     // For S3 uploads, we need to validate before upload
     // For local uploads, file is already saved, so we validate then delete if invalid
 
@@ -37,6 +51,7 @@ const validateFileType = async (req, res, next) => {
       // File is on disk (disk storage)
       fileBuffer = await fs.readFile(req.file.path);
     } else {
+      logger.error('File upload missing both buffer and path:', JSON.stringify(req.file));
       return res.status(500).json({ error: 'Unable to read uploaded file' });
     }
 
