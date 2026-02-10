@@ -81,11 +81,17 @@ jobs:
           echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
 
       - name: Deploy via SSH pull
+        env:
+          BACKEND_ENV: ${{ secrets.BACKEND_ENV_FILE }}
         run: |
           echo "${{ secrets.GC_SSH_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
           HOST="${{ secrets.GC_SERVER_USER }}@${{ secrets.GC_SERVER_HOST }}"
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/$RELEASE_TAG/image.tar"
+
+          # Create .env file on VM
+          echo "$BACKEND_ENV" | ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            -o ConnectTimeout=10 "$HOST" "cat > /home/badiakaseydou/.env"
 
           ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
             -o ConnectTimeout=10 "$HOST" \
