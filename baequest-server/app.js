@@ -1,4 +1,18 @@
 require("dotenv").config();
+const Sentry = require("@sentry/node");
+
+// Initialize Sentry before other imports
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || "development",
+    tracesSampleRate: 0.1, // 10% of transactions for performance monitoring
+    ignoreErrors: [
+      "UnauthorizedError", // Don't report auth failures as errors
+      "NotFoundError",
+    ],
+  });
+}
 
 const http = require("http");
 const cors = require("cors");
@@ -120,6 +134,11 @@ app.use((req, res) => {
     .status(STATUS.NOT_FOUND)
     .json({ message: "Requested resource not found" });
 });
+
+// Sentry error handler - must be before other error handlers
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.setupExpressErrorHandler());
+}
 
 app.use(errorHandler);
 
