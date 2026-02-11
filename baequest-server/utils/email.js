@@ -345,8 +345,117 @@ const sendFeedbackRequestEmail = async (email, feedbackUrl, eventDetails) => {
   }
 };
 
+/**
+ * Send welcome email to new users
+ * @param {string} email - Recipient email address
+ */
+const sendWelcomeEmail = async (email) => {
+  try {
+    const appUrl = process.env.FRONTEND_URL || 'https://baequests.com';
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
+      to: email,
+      subject: 'Welcome to BaeQuest! Let the adventure begin 💕',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+            }
+            .container {
+              background: linear-gradient(135deg, #fdf2f8 0%, #fae8ff 100%);
+              border-radius: 16px;
+              padding: 40px;
+              border: 2px solid #f9a8d4;
+            }
+            h1 {
+              color: #db2777;
+              font-size: 28px;
+              margin-bottom: 20px;
+            }
+            p {
+              font-size: 16px;
+              margin-bottom: 16px;
+            }
+            .button {
+              display: inline-block;
+              padding: 14px 32px;
+              background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+              color: white;
+              text-decoration: none;
+              border-radius: 50px;
+              font-weight: 600;
+              margin: 24px 0;
+              box-shadow: 0 4px 12px rgba(219, 39, 119, 0.25);
+            }
+            .feature-list {
+              background: white;
+              border-radius: 12px;
+              padding: 20px;
+              margin: 20px 0;
+            }
+            .feature-list h3 {
+              color: #db2777;
+              margin-top: 0;
+            }
+            .feature-list ul {
+              padding-left: 20px;
+            }
+            .feature-list li {
+              margin: 10px 0;
+            }
+            .footer {
+              margin-top: 32px;
+              font-size: 14px;
+              color: #666;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Welcome to BaeQuest! 🎉</h1>
+            <p>Hi there,</p>
+            <p>We're thrilled to have you join the BaeQuest community! You've taken the first step towards making meaningful connections at events in the DMV area.</p>
+
+            <div class="feature-list">
+              <h3>Here's what you can do:</h3>
+              <ul>
+                <li>🗓️ <strong>Browse Events</strong> - Discover exciting events happening near you</li>
+                <li>👋 <strong>Meet People</strong> - Connect with others attending the same events</li>
+                <li>💬 <strong>Start Conversations</strong> - Use conversation starters to break the ice</li>
+                <li>📍 <strong>Check In</strong> - Let others know you're at an event</li>
+              </ul>
+            </div>
+
+            <p>Ready to find your next adventure?</p>
+
+            <a href="${appUrl}" class="button">Explore Events</a>
+
+            <div class="footer">
+              <p>Happy connecting! 💖</p>
+              <p>— The BaeQuest Team</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    });
+  } catch (error) {
+    console.error('Resend welcome email error:', error);
+    // Don't throw - welcome email is not critical
+  }
+};
+
 module.exports = {
   sendPasswordResetEmail,
   sendVerificationEmail,
   sendFeedbackRequestEmail,
+  sendWelcomeEmail,
 };

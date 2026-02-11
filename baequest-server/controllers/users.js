@@ -9,7 +9,7 @@ const {
   UnauthorizedError, BadRequestError, NotFoundError,
   ConflictError
 } = require("../utils/customErrors");
-const { sendVerificationEmail } = require("../utils/email");
+const { sendVerificationEmail, sendWelcomeEmail } = require("../utils/email");
 const logger = require("../utils/logger");
 
 module.exports.createUser = async (req, res, next) => {
@@ -42,11 +42,15 @@ module.exports.createUser = async (req, res, next) => {
     });
     console.log('✅ Verification document created:', verificationDoc._id);
 
-    // Send verification email
+    // Send verification email and welcome email
     try {
       const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
       await sendVerificationEmail(email, verificationUrl);
       console.log('✅ Verification email sent to:', email);
+
+      // Send welcome email
+      await sendWelcomeEmail(email);
+      console.log('✅ Welcome email sent to:', email);
     } catch (emailError) {
       logger.error('Failed to send verification email:', emailError);
       console.log('❌ Email sending failed:', emailError.message);
@@ -234,6 +238,7 @@ module.exports.googleAuth = async (req, res, next) => {
     // Check if user exists
     let foundUser = await user.findOne({ $or: [{ googleId }, { email }] });
 
+    let isNewUser = false;
     if (!foundUser) {
       // Create new user with Google ID - email is already verified by Google
       foundUser = await user.create({
@@ -241,6 +246,7 @@ module.exports.googleAuth = async (req, res, next) => {
         googleId,
         isEmailVerified: true,
       });
+      isNewUser = true;
     } else if (!foundUser.googleId) {
       // User exists with email but no Google ID - link accounts and mark as verified
       foundUser.googleId = googleId;
@@ -252,6 +258,13 @@ module.exports.googleAuth = async (req, res, next) => {
     const token = jwt.sign({ _id: foundUser._id }, SECRET.JWT_SECRET, {
       expiresIn: "7d",
     });
+
+    // Send welcome email to new users
+    if (isNewUser) {
+      sendWelcomeEmail(email).catch(err => {
+        logger.error('Failed to send welcome email:', err);
+      });
+    }
 
     res
       .cookie("jwt", token, {
