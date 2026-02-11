@@ -118,17 +118,19 @@ async function seedDMVPlacesEvents() {
         const eventDate = new Date(today);
         eventDate.setDate(eventDate.getDate() + daysUntil);
 
-        // Event starts at 6:00 PM
+        // Event starts at 6:00 PM Eastern Time
+        // Server runs in UTC, so add 5 hours for EST offset (18 + 5 = 23)
         const startTime = new Date(eventDate);
-        startTime.setHours(18, 0, 0, 0);
+        startTime.setUTCHours(23, 0, 0, 0);
 
-        // Event ends at closing time
+        // Event ends at closing time (convert from Eastern to UTC by adding 5 hours)
         const endTime = new Date(eventDate);
-        endTime.setHours(daySchedule.closeHours, daySchedule.closeMinutes, 0, 0);
+        const closeHoursUTC = daySchedule.closeHours + 5; // EST offset
+        endTime.setUTCHours(closeHoursUTC, daySchedule.closeMinutes, 0, 0);
 
-        // If closing time is before 6 AM (likely next day), add a day
+        // If closing time is before 6 AM Eastern (11 UTC), it's next day
         if (daySchedule.closeHours < 6) {
-          endTime.setDate(endTime.getDate() + 1);
+          endTime.setUTCDate(endTime.getUTCDate() + 1);
         }
 
         // Only create event if it ends after it starts
