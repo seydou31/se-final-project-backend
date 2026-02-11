@@ -137,7 +137,7 @@ app.use((req, res) => {
 
 // Sentry error handler - must be before other error handlers
 if (process.env.SENTRY_DSN) {
-  app.use(Sentry.setupExpressErrorHandler());
+  Sentry.setupExpressErrorHandler(app);
 }
 
 app.use(errorHandler);
