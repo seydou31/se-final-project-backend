@@ -16,14 +16,16 @@ module.exports.events = async (req, res, next) => {
     // Build query filter
     const filter = { endTime: { $gt: now } };
 
-    // Add state filter if provided
+    // Add state filter if provided (case-insensitive, trimmed)
     if (state) {
-      filter.state = state;
+      const trimmedState = state.trim();
+      filter.state = { $regex: new RegExp(`^${trimmedState}$`, 'i') };
     }
 
-    // Add city filter if provided (case-insensitive)
+    // Add city filter if provided (case-insensitive, trimmed)
     if (city) {
-      filter.city = { $regex: new RegExp(`^${city}$`, 'i') };
+      const trimmedCity = city.trim();
+      filter.city = { $regex: new RegExp(`^${trimmedCity}$`, 'i') };
     }
 
     const data = await event.find(filter);
