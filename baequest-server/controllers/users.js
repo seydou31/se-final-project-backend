@@ -284,3 +284,77 @@ module.exports.googleAuth = async (req, res, next) => {
     next(new UnauthorizedError("Google authentication failed: " + err.message));
   }
 };
+
+// Google auth with access token (for mobile implicit flow)
+module.exports.googleAuthWithToken = async (req, res, next) => {
+  const { accessToken } = req.body;
+
+  try {
+    // Fetch user info from Google using access token
+    const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch user info from Google');
+    }
+
+    const payload = await response.json();
+    const googleId = payload.id;
+    const email = payload.email;
+
+    if (!email) {
+      throw new Error('Email not provided by Google');
+    }
+
+    // Check if user exists
+    let foundUser = await user.findOne({ $or: [{ googleId }, { email }] });
+
+    let isNewUser = false;
+    if (!foundUser) {
+      // Create new user with Google ID - email is already verified by Google
+      foundUser = await user.create({
+        email,
+        googleId,
+        isEmailVerified: true,
+      });
+      isNewUser = true;
+    } else if (!foundUser.googleId) {
+      // User exists with email but no Google ID - link accounts and mark as verified
+      foundUser.googleId = googleId;
+      foundUser.isEmailVerified = true;
+      await foundUser.save();
+    }
+
+    // Create JWT token
+    const token = jwt.sign({ _id: foundUser._id }, SECRET.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    // Send welcome email to new users
+    if (isNewUser) {
+      sendWelcomeEmail(email).catch(err => {
+        logger.error('Failed to send welcome email:', err);
+      });
+    }
+
+    res
+      .cookie("jwt", token, {
+        maxAge: 3600000 * 24 * 7,
+        httpOnly: true,
+        secure: true,
+        sameSite: "None",
+      })
+      .json({
+        message: "Google authentication successful",
+        user: {
+          _id: foundUser._id,
+          email: foundUser.email,
+        },
+      });
+  } catch (err) {
+    next(new UnauthorizedError("Google authentication failed: " + err.message));
+  }
+};
