@@ -3,17 +3,13 @@ const { BadRequestError } = require("../utils/customErrors");
 
 // Custom sanitization to prevent XSS in text fields
 const sanitizeString = (value, helpers) => {
-  // Remove HTML tags and script tags
-  const sanitized = value
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<[^>]+>/g, '')
-    .trim();
-
-  if (sanitized !== value) {
+  // Check for HTML/script tags (XSS attempts)
+  if (/<script\b/i.test(value) || /<[^>]+>/g.test(value)) {
     return helpers.error('string.unsafe', { value });
   }
 
-  return sanitized;
+  // Return trimmed value
+  return value.trim();
 };
 
 // User validation schemas
