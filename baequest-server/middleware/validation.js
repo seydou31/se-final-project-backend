@@ -28,9 +28,9 @@ const createUserSchema = Joi.object({
     .pattern(/^(?=.*[A-Z])(?=.*\d)/)
     .required()
     .messages({
-      "string.min": "Password must be at least 8 characters long",
+      "string.min": "Password must be at least 8 characters with one uppercase letter and one number",
       "string.max": "Password must not exceed 128 characters",
-      "string.pattern.base": "Password must contain at least one uppercase letter and one number",
+      "string.pattern.base": "Password must be at least 8 characters with one uppercase letter and one number",
       "any.required": "Password is required",
     }),
 });
