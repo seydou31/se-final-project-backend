@@ -13,6 +13,8 @@ jest.setTimeout(30000);
 jest.mock('../utils/email', () => ({
   sendVerificationEmail: jest.fn().mockResolvedValue(true),
   sendPasswordResetEmail: jest.fn().mockResolvedValue(true),
+  sendWelcomeEmail: jest.fn().mockResolvedValue(true),
+  sendFeedbackRequestEmail: jest.fn().mockResolvedValue(true),
 }));
 
 // Close database connection after all tests
