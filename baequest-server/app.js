@@ -22,14 +22,12 @@ const rateLimit = require("express-rate-limit");
 const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
 const { Server } = require("socket.io");
-const { seedEvents } = require("./utils/seedEvents");
 const mainRoute = require("./routes/index");
 const STATUS = require("./utils/errors");
-const event = require("./models/event");
-const profile = require("./models/profile");
 const errorHandler = require("./middleware/errorHandler");
 const logger = require("./utils/logger");
 const requestLogger = require("./middleware/requestLogger");
+const profile = require("./models/profile");
 
 const { PORT = 3001 } = process.env;
 
@@ -52,14 +50,14 @@ io.on("connection", (socket) => {
   logger.info(`✅ User connected: ${socket.id}`);
   logger.info(`Total connected clients: ${io.engine.clientsCount}`);
 
-  socket.on("join-event", ({ eventId }) => {
-    socket.join(`event_${eventId}`);
-    logger.info(`${socket.id} joined room event_${eventId}`);
+  socket.on("join-place", ({ placeId }) => {
+    socket.join(`place_${placeId}`);
+    logger.info(`${socket.id} joined room place_${placeId}`);
   });
 
-  socket.on("leave-event", ({ eventId }) => {
-    socket.leave(`event_${eventId}`);
-    logger.info(`${socket.id} left room event_${eventId}`);
+  socket.on("leave-place", ({ placeId }) => {
+    socket.leave(`place_${placeId}`);
+    logger.info(`${socket.id} left room place_${placeId}`);
   });
 
   socket.on("disconnect", () => {
@@ -67,43 +65,6 @@ io.on("connection", (socket) => {
     logger.info(`Total connected clients: ${io.engine.clientsCount}`);
   });
 });
-
-setInterval(async () => {
-  try {
-    const now = new Date();
-    const justExpired = await event.find({
-      endTime: {
-        $lte: now,
-        $gt: new Date(now.getTime() - 10000)
-      }
-    });
-
-    await Promise.all(justExpired.map(async (expiredEvent) => {
-      logger.info(`Event expired: ${expiredEvent.title} (${expiredEvent._id})`);
-
-      io.emit("event-expired", {
-        eventId: expiredEvent._id
-      });
-
-      const usersAtEvent = await profile.find({
-        "location.eventId": expiredEvent._id
-      });
-
-      await Promise.all(usersAtEvent.map(async (userProfile) => {
-        await profile.findByIdAndUpdate(userProfile._id, {
-          $unset: { "location.eventId": "" }
-        });
-
-        io.to(`event_${expiredEvent._id}`).emit("force-checkout", {
-          message: "This event has ended",
-          eventId: expiredEvent._id
-        });
-      }));
-    }));
-  } catch (err) {
-    logger.error("Error checking expired events:", err);
-  }
-}, 10000);
 
 
 
@@ -144,14 +105,45 @@ app.use(errorHandler);
 
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/baequest-db";
 
+// Auto-checkout all users at 2am daily
+function scheduleAutoCheckout() {
+  const now = new Date();
+  const next2am = new Date();
+  next2am.setHours(2, 0, 0, 0);
+
+  // If it's past 2am today, schedule for tomorrow
+  if (now >= next2am) {
+    next2am.setDate(next2am.getDate() + 1);
+  }
+
+  const msUntil2am = next2am.getTime() - now.getTime();
+
+  setTimeout(async () => {
+    try {
+      const result = await profile.updateMany(
+        { "location.placeId": { $exists: true, $ne: null } },
+        { $unset: { "location.placeId": "", "location.placeName": "", "location.placeAddress": "" } }
+      );
+      logger.info(`Auto-checkout at 2am: ${result.modifiedCount} users checked out`);
+    } catch (err) {
+      logger.error("Auto-checkout failed:", err);
+    }
+    // Reschedule for next day
+    scheduleAutoCheckout();
+  }, msUntil2am);
+
+  logger.info(`Auto-checkout scheduled for ${next2am.toLocaleString()}`);
+}
+
 mongoose
   .connect(MONGODB_URI)
-  .then(async () => {
+  .then(() => {
     logger.info("Connected to MongoDB successfully");
-    await seedEvents();
     server.listen(PORT, () => {
       logger.info(`App + Socket.io listening on port ${PORT}`);
     });
+    // Start the auto-checkout scheduler
+    scheduleAutoCheckout();
   })
   .catch((err) => {
     logger.error("Failed to connect to MongoDB", err);

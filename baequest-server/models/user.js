@@ -61,11 +61,6 @@ user.statics.findUserByCredentials = function findUserByCredentials(email, passw
           return Promise.reject(new Error("Incorrect password or email"));
         }
 
-        // Check if email is verified
-        if (!foundUser.isEmailVerified) {
-          return Promise.reject(new Error("Please verify your email address before logging in. Check your inbox for the verification link."));
-        }
-
         return foundUser;
       });
     });

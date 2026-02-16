@@ -23,7 +23,6 @@ module.exports.createUser = async (req, res, next) => {
 
     const hash = await bcrypt.hash(password, 10);
     const newUser = await user.create({ email, password: hash, isEmailVerified: false });
-    console.log('✅ User created:', newUser._id);
 
     // Generate verification token
     const verificationToken = crypto.randomBytes(32).toString('hex');
@@ -31,31 +30,23 @@ module.exports.createUser = async (req, res, next) => {
       .createHash('sha256')
       .update(verificationToken)
       .digest('hex');
-    console.log('✅ Token generated');
 
     // Create verification document with 24-hour expiration
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const verificationDoc = await EmailVerification.create({
+    await EmailVerification.create({
       userId: newUser._id,
       token: hashedToken,
       expiresAt,
     });
-    console.log('✅ Verification document created:', verificationDoc._id);
 
-    // Send verification email and welcome email
-    try {
-      const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
-      await sendVerificationEmail(email, verificationUrl);
-      console.log('✅ Verification email sent to:', email);
-
-      // Send welcome email
-      await sendWelcomeEmail(email);
-      console.log('✅ Welcome email sent to:', email);
-    } catch (emailError) {
-      logger.error('Failed to send verification email:', emailError);
-      console.log('❌ Email sending failed:', emailError.message);
-      // Don't fail signup if email fails - user can request resend later
-    }
+    // Send verification and welcome emails asynchronously (don't block response)
+    const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
+    sendVerificationEmail(email, verificationUrl).catch(err => {
+      logger.error('Failed to send verification email:', err);
+    });
+    sendWelcomeEmail(email).catch(err => {
+      logger.error('Failed to send welcome email:', err);
+    });
 
     const userObject = newUser.toObject();
     delete userObject.password;

@@ -68,7 +68,9 @@ const profile = new mongoose.Schema({
    location: {
     lat: Number,
     lng: Number,
-    eventId: { type: mongoose.Schema.Types.ObjectId, ref: "event" },
+    placeId: String,
+    placeName: String,
+    placeAddress: String,
     updatedAt: Date,
   },
   owner: {
