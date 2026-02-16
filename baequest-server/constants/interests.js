@@ -4,7 +4,7 @@
           "photography",
           "cooking",
           "fitness",
-          "nusic",
+          "music",
           "reading",
           "art",
           "movies",
