@@ -48,12 +48,25 @@ module.exports.createUser = async (req, res, next) => {
       logger.error('Failed to send welcome email:', err);
     });
 
+    // Auto-login: generate JWT and set cookie
+    const token = jwt.sign({ _id: newUser._id }, SECRET.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
     const userObject = newUser.toObject();
     delete userObject.password;
-    return res.status(201).send({
-      ...userObject,
-      message: 'Account created successfully. Please check your email to verify your account.'
-    });
+    return res
+      .status(201)
+      .cookie("jwt", token, {
+        maxAge: 3600000 * 24 * 7,
+        httpOnly: true,
+        secure: true,
+        sameSite: "None",
+      })
+      .json({
+        ...userObject,
+        message: 'Account created successfully. Please check your email to verify your account.'
+      });
   } catch (err) {
     return next(err);
   }
