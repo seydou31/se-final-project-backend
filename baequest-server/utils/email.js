@@ -308,11 +308,11 @@ const sendFeedbackRequestEmail = async (email, feedbackUrl, eventDetails) => {
 
             <div class="questions">
               <h3>We'd love your feedback!</h3>
-              <p>Your feedback helps us improve BaeQuest for everyone. We're interested in:</p>
+              <p>Your feedback helps us improve BaeQuest for everyone:</p>
               <ul>
-                <li>⭐ How would you rate this event? (1-5 stars)</li>
-                <li>💬 Any comments about your experience?</li>
-                <li>📍 <strong>Know a great meeting place?</strong> Suggest venues that would be perfect for future events!</li>
+                <li>⭐ How would you rate your experience? (1-5 stars)</li>
+                <li>💬 Did you meet anyone interesting?</li>
+                <li>💡 Any suggestions to improve BaeQuest?</li>
               </ul>
             </div>
 
@@ -324,7 +324,7 @@ const sendFeedbackRequestEmail = async (email, feedbackUrl, eventDetails) => {
               ⏰ This feedback link expires in 7 days
             </div>
 
-            <p>Your input helps us create better events and discover amazing new venues. Plus, we love hearing your venue suggestions - you know the best local spots!</p>
+            <p>Your input helps us make BaeQuest better for everyone. We appreciate you taking the time!</p>
 
             <p>Thank you for being part of the BaeQuest community! 💖</p>
 
@@ -422,21 +422,21 @@ const sendWelcomeEmail = async (email) => {
           <div class="container">
             <h1>Welcome to BaeQuest! 🎉</h1>
             <p>Hi there,</p>
-            <p>We're thrilled to have you join the BaeQuest community! You've taken the first step towards making meaningful connections at events in the DMV area.</p>
+            <p>We're thrilled to have you join the BaeQuest community! You've taken the first step towards making real connections at places you already go.</p>
 
             <div class="feature-list">
-              <h3>Here's what you can do:</h3>
+              <h3>Here's how it works:</h3>
               <ul>
-                <li>🗓️ <strong>Browse Events</strong> - Discover exciting events happening near you</li>
-                <li>👋 <strong>Meet People</strong> - Connect with others attending the same events</li>
-                <li>💬 <strong>Start Conversations</strong> - Use conversation starters to break the ice</li>
-                <li>📍 <strong>Check In</strong> - Let others know you're at an event</li>
+                <li>📍 <strong>Find Places</strong> - Discover bars, lounges, and venues near you</li>
+                <li>✅ <strong>Check In</strong> - Let others know you're there and open to meeting</li>
+                <li>👋 <strong>See Who's There</strong> - Browse profiles of people at the same place</li>
+                <li>💬 <strong>Break the Ice</strong> - Use their conversation starter to approach them</li>
               </ul>
             </div>
 
-            <p>Ready to find your next adventure?</p>
+            <p>Ready to meet someone?</p>
 
-            <a href="${appUrl}" class="button">Explore Events</a>
+            <a href="${appUrl}" class="button">Find Places Near You</a>
 
             <div class="footer">
               <p>Happy connecting! 💖</p>
