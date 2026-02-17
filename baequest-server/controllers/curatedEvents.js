@@ -1,22 +1,23 @@
 const CuratedEvent = require("../models/curatedEvent");
 const { BadRequestError } = require("../utils/customErrors");
 
-// Geocode an address using Google Geocoding API
-const geocodeAddress = async (address) => {
+// Get coordinates from address using Google Places API (Find Place)
+const getCoordinatesFromAddress = async (address) => {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey) {
-    throw new BadRequestError("Geocoding not configured");
+    throw new BadRequestError("Places API not configured");
   }
 
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
+  // Use Find Place from Text to get location
+  const url = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(address)}&inputtype=textquery&fields=geometry&key=${apiKey}`;
   const response = await fetch(url);
   const data = await response.json();
 
-  if (data.status !== "OK" || !data.results || data.results.length === 0) {
-    throw new BadRequestError("Could not geocode address. Please check the address and try again.");
+  if (data.status !== "OK" || !data.candidates || data.candidates.length === 0) {
+    throw new BadRequestError("Could not find address. Please check the address and try again.");
   }
 
-  const location = data.results[0].geometry.location;
+  const location = data.candidates[0].geometry.location;
   return { lat: location.lat, lng: location.lng };
 };
 
@@ -30,10 +31,10 @@ module.exports.createEvent = async (req, res, next) => {
       throw new BadRequestError("Name, address, start time, and end time are required");
     }
 
-    // If lat/lng not provided, geocode the address
+    // If lat/lng not provided, get coordinates from address
     let coordinates = { lat, lng };
     if (!lat || !lng) {
-      coordinates = await geocodeAddress(address);
+      coordinates = await getCoordinatesFromAddress(address);
     }
 
     // Validate times
