@@ -92,7 +92,10 @@ const eventFeedbackSchema = new mongoose.Schema({
 });
 
 // Indexes
-eventFeedbackSchema.index({ userId: 1, eventId: 1 }, { unique: true, sparse: true }); // One feedback request per user per event
+eventFeedbackSchema.index(
+  { userId: 1, eventId: 1 },
+  { unique: true, partialFilterExpression: { eventId: { $type: 'objectId' } } }
+); // One feedback request per user per event (only when eventId exists)
 eventFeedbackSchema.index({ userId: 1, placeId: 1 }); // Lookup by user + place
 eventFeedbackSchema.index({ token: 1 }); // Fast token lookup
 eventFeedbackSchema.index({ eventId: 1 }); // Get all feedback for an event
