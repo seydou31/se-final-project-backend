@@ -202,6 +202,10 @@ module.exports.checkoutFromPlace = async (req, res, next) => {
     if (placeName) {
       (async () => {
         try {
+          // Skip if feedback already exists for this user + place
+          const existing = await EventFeedback.findOne({ userId, placeId });
+          if (existing) return;
+
           const foundUser = await user.findById(userId);
           if (!foundUser?.email) return;
 
