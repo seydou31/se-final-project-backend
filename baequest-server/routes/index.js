@@ -53,4 +53,8 @@ router.delete('/deleteUser', auth, deleteUser);
 router.post('/events', createEvent);
 router.get('/events/nearby', getNearbyEvents);
 
+// Event feedback routes
+const eventFeedbackRouter = require('./eventFeedback');
+router.use('/events', eventFeedbackRouter);
+
 module.exports = router;

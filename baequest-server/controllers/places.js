@@ -1,5 +1,7 @@
+const crypto = require("crypto");
 const profile = require("../models/profile");
 const user = require("../models/user");
+const EventFeedback = require("../models/eventFeedback");
 const logger = require("../utils/logger");
 const { BadRequestError } = require("../utils/customErrors");
 const { sendFeedbackRequestEmail } = require("../utils/email");
@@ -196,19 +198,38 @@ module.exports.checkoutFromPlace = async (req, res, next) => {
       placeId,
     });
 
-    // Send feedback request email asynchronously
+    // Create feedback request and send email asynchronously
     if (placeName) {
-      const foundUser = await user.findById(userId);
-      if (foundUser?.email) {
-        const feedbackUrl = `${process.env.FRONTEND_URL || 'https://baequests.com'}/feedback?placeId=${placeId}`;
-        sendFeedbackRequestEmail(foundUser.email, feedbackUrl, {
-          name: placeName,
-          date: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
-          location: placeAddress || 'N/A',
-        }).catch(err => {
-          logger.error('Failed to send feedback email:', err);
-        });
-      }
+      (async () => {
+        try {
+          const foundUser = await user.findById(userId);
+          if (!foundUser?.email) return;
+
+          // Generate feedback token
+          const token = crypto.randomBytes(32).toString('hex');
+
+          // Create feedback document
+          await EventFeedback.create({
+            userId,
+            placeId,
+            placeName,
+            placeAddress: placeAddress || '',
+            token,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            emailSent: true,
+            emailSentAt: new Date(),
+          });
+
+          const feedbackUrl = `${process.env.FRONTEND_URL || 'https://baequests.com'}/event-feedback?token=${token}`;
+          await sendFeedbackRequestEmail(foundUser.email, feedbackUrl, {
+            name: placeName,
+            date: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+            location: placeAddress || 'N/A',
+          });
+        } catch (err) {
+          logger.error('Failed to create feedback request:', err);
+        }
+      })();
     }
 
     logger.info(`User ${userId} checked out from place ${placeId}`);

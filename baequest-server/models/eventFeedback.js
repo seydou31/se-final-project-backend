@@ -8,8 +8,16 @@ const eventFeedbackSchema = new mongoose.Schema({
   },
   eventId: {
     type: mongoose.Schema.Types.ObjectId,
-    required: true,
     ref: 'event',
+  },
+  placeId: {
+    type: String,
+  },
+  placeName: {
+    type: String,
+  },
+  placeAddress: {
+    type: String,
   },
   // Feedback token for email verification
   token: {
@@ -84,7 +92,8 @@ const eventFeedbackSchema = new mongoose.Schema({
 });
 
 // Indexes
-eventFeedbackSchema.index({ userId: 1, eventId: 1 }, { unique: true }); // One feedback request per user per event
+eventFeedbackSchema.index({ userId: 1, eventId: 1 }, { unique: true, sparse: true }); // One feedback request per user per event
+eventFeedbackSchema.index({ userId: 1, placeId: 1 }); // Lookup by user + place
 eventFeedbackSchema.index({ token: 1 }); // Fast token lookup
 eventFeedbackSchema.index({ eventId: 1 }); // Get all feedback for an event
 eventFeedbackSchema.index({ rating: 1 }); // Filter by rating

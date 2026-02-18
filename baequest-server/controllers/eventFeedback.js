@@ -104,10 +104,21 @@ module.exports.getFeedbackRequest = async (req, res, next) => {
     if (feedbackRequest.expiresAt < new Date()) {
       return res.status(400).json({
         error: 'Feedback request expired',
-        message: 'This feedback link has expired. Feedback requests expire 7 days after the event.',
+        message: 'This feedback link has expired. Feedback requests expire 7 days after checkout.',
       });
     }
 
+    // Place-based feedback
+    if (feedbackRequest.placeId) {
+      return res.status(200).json({
+        placeId: feedbackRequest.placeId,
+        eventName: feedbackRequest.placeName,
+        eventDate: feedbackRequest.createdAt,
+        eventLocation: feedbackRequest.placeAddress || 'N/A',
+      });
+    }
+
+    // Event-based feedback
     res.status(200).json({
       eventId: feedbackRequest.eventId._id,
       eventName: feedbackRequest.eventId.title,
