@@ -1,6 +1,8 @@
 const profile = require("../models/profile");
+const user = require("../models/user");
 const logger = require("../utils/logger");
 const { BadRequestError } = require("../utils/customErrors");
+const { sendFeedbackRequestEmail } = require("../utils/email");
 
 // Proxy to Google Places API to hide API key from frontend
 module.exports.getNearbyPlaces = async (req, res, next) => {
@@ -169,6 +171,11 @@ module.exports.checkoutFromPlace = async (req, res, next) => {
       throw new BadRequestError("Missing placeId");
     }
 
+    // Get profile before clearing location so we have place details for feedback email
+    const currentProfile = await profile.findOne({ owner: userId });
+    const placeName = currentProfile?.location?.placeName;
+    const placeAddress = currentProfile?.location?.placeAddress;
+
     const updatedProfile = await profile.findOneAndUpdate(
       { owner: userId },
       {
@@ -188,6 +195,21 @@ module.exports.checkoutFromPlace = async (req, res, next) => {
       userId: updatedProfile._id,
       placeId,
     });
+
+    // Send feedback request email asynchronously
+    if (placeName) {
+      const foundUser = await user.findById(userId);
+      if (foundUser?.email) {
+        const feedbackUrl = `${process.env.FRONTEND_URL || 'https://baequests.com'}/feedback?placeId=${placeId}`;
+        sendFeedbackRequestEmail(foundUser.email, feedbackUrl, {
+          name: placeName,
+          date: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+          location: placeAddress || 'N/A',
+        }).catch(err => {
+          logger.error('Failed to send feedback email:', err);
+        });
+      }
+    }
 
     logger.info(`User ${userId} checked out from place ${placeId}`);
     res.status(200).json({ message: "Checked out successfully", profile: updatedProfile });
