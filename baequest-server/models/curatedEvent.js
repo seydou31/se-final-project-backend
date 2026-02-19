@@ -35,6 +35,18 @@ const curatedEventSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  description: {
+    type: String,
+    trim: true,
+    maxlength: 1000,
+  },
+  photo: {
+    type: String, // URL
+  },
+  link: {
+    type: String, // Event URL (e.g. Eventbrite, Facebook)
+    trim: true,
+  },
   startTime: {
     type: Date,
     required: true,

@@ -1,4 +1,7 @@
 const crypto = require("crypto");
+const path = require("path");
+const fs = require("fs").promises;
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const CuratedEvent = require("../models/curatedEvent");
 const profile = require("../models/profile");
 const user = require("../models/user");
@@ -6,6 +9,7 @@ const EventFeedback = require("../models/eventFeedback");
 const { BadRequestError, NotFoundError } = require("../utils/customErrors");
 const { sendFeedbackRequestEmail } = require("../utils/email");
 const logger = require("../utils/logger");
+const { isS3Configured } = require("../middleware/multer");
 
 // Haversine distance in km between two lat/lng points
 function haversineKm(lat1, lng1, lat2, lng2) {
@@ -37,9 +41,38 @@ const getCoordinatesFromAddress = async (address) => {
   return { lat: location.lat, lng: location.lng };
 };
 
+// Upload a photo to S3 or local disk, returns the URL
+async function uploadEventPhoto(file) {
+  const ext = path.extname(file.originalname) || ".jpg";
+  const uniqueName = `${crypto.randomBytes(16).toString("hex")}${ext}`;
+
+  if (isS3Configured) {
+    const s3 = new S3Client({
+      region: process.env.AWS_REGION || "us-east-1",
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      },
+    });
+    const key = `event-photos/${uniqueName}`;
+    await s3.send(new PutObjectCommand({
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Key: key,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+    }));
+    return `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION || "us-east-1"}.amazonaws.com/${key}`;
+  } else {
+    const uploadDir = path.join(__dirname, "..", "uploads", "event-photos");
+    await fs.mkdir(uploadDir, { recursive: true });
+    await fs.writeFile(path.join(uploadDir, uniqueName), file.buffer);
+    return `/uploads/event-photos/${uniqueName}`;
+  }
+}
+
 // Create a new curated event (public - no auth required)
 module.exports.createEvent = async (req, res, next) => {
-  const { name, address, city, state, zipcode, lat, lng, startTime, endTime } = req.body;
+  const { name, address, city, state, zipcode, lat, lng, startTime, endTime, description, link } = req.body;
 
   try {
     // Validate required fields
@@ -65,12 +98,21 @@ module.exports.createEvent = async (req, res, next) => {
       throw new BadRequestError("End time must be after start time");
     }
 
+    // Upload photo if provided
+    let photoUrl;
+    if (req.file) {
+      photoUrl = await uploadEventPhoto(req.file);
+    }
+
     const event = await CuratedEvent.create({
       name,
       address,
       ...(city && { city }),
       ...(state && { state }),
       ...(zipcode && { zipcode }),
+      ...(description && { description }),
+      ...(photoUrl && { photo: photoUrl }),
+      ...(link && { link }),
       location: {
         type: "Point",
         coordinates: [coordinates.lng, coordinates.lat], // GeoJSON uses [lng, lat]
@@ -139,6 +181,9 @@ module.exports.getEvents = async (req, res, next) => {
         city: event.city,
         state: event.state,
         zipcode: event.zipcode,
+        description: event.description,
+        photo: event.photo,
+        link: event.link,
         lat: eventLat,
         lng: eventLng,
         startTime: event.startTime,

@@ -1,9 +1,10 @@
 const router = require("express").Router();
 const { createEvent, getNearbyEvents, getEvents, markAsGoing, checkinAtEvent, checkoutFromEvent, getUsersAtEvent } = require("../controllers/curatedEvents");
 const auth = require("../middleware/auth");
+const upload = require("../middleware/multer");
 
 // Public routes - no auth required
-router.post("/", createEvent);
+router.post("/", upload.single("photo"), createEvent);
 router.get("/nearby", getNearbyEvents);
 
 // Protected routes - auth required
