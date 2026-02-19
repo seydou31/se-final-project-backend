@@ -19,7 +19,6 @@ const {
 } = require('../controllers/places');
 const {requestPasswordReset, resetPassword} = require('../controllers/passwordReset');
 const {sendVerification, verifyEmail} = require('../controllers/emailVerification');
-const { createEvent, getNearbyEvents } = require('../controllers/curatedEvents');
 const auth = require('../middleware/auth');
 const {
   validate,
@@ -49,9 +48,9 @@ router.get('/places/users', auth, getUsersAtPlace);
 
 router.delete('/deleteUser', auth, deleteUser);
 
-// Curated events routes (public - no auth)
-router.post('/events', createEvent);
-router.get('/events/nearby', getNearbyEvents);
+// Curated events routes
+const curatedEventsRouter = require('./curatedEvents');
+router.use('/events', curatedEventsRouter);
 
 // Event feedback routes
 const eventFeedbackRouter = require('./eventFeedback');
