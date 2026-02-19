@@ -28,6 +28,7 @@ const errorHandler = require("./middleware/errorHandler");
 const logger = require("./utils/logger");
 const requestLogger = require("./middleware/requestLogger");
 const profile = require("./models/profile");
+const CuratedEvent = require("./models/curatedEvent");
 
 const { PORT = 3001 } = process.env;
 
@@ -50,14 +51,14 @@ io.on("connection", (socket) => {
   logger.info(`✅ User connected: ${socket.id}`);
   logger.info(`Total connected clients: ${io.engine.clientsCount}`);
 
-  socket.on("join-place", ({ placeId }) => {
-    socket.join(`place_${placeId}`);
-    logger.info(`${socket.id} joined room place_${placeId}`);
+  socket.on("join-event", ({ eventId }) => {
+    socket.join(`event_${eventId}`);
+    logger.info(`${socket.id} joined room event_${eventId}`);
   });
 
-  socket.on("leave-place", ({ placeId }) => {
-    socket.leave(`place_${placeId}`);
-    logger.info(`${socket.id} left room place_${placeId}`);
+  socket.on("leave-event", ({ eventId }) => {
+    socket.leave(`event_${eventId}`);
+    logger.info(`${socket.id} left room event_${eventId}`);
   });
 
   socket.on("disconnect", () => {
@@ -120,11 +121,17 @@ function scheduleAutoCheckout() {
 
   setTimeout(async () => {
     try {
-      const result = await profile.updateMany(
-        { "location.placeId": { $exists: true, $ne: null } },
-        { $unset: { "location.placeId": "", "location.placeName": "", "location.placeAddress": "" } }
+      // Clear event check-ins from profiles
+      const profileResult = await profile.updateMany(
+        { "location.eventId": { $exists: true, $ne: null } },
+        { $unset: { "location.eventId": "", "location.lat": "", "location.lng": "" }, $set: { "location.updatedAt": new Date() } }
       );
-      logger.info(`Auto-checkout at 2am: ${result.modifiedCount} users checked out`);
+      // Clear checkedInUsers arrays on all events
+      const eventResult = await CuratedEvent.updateMany(
+        { checkedInUsers: { $exists: true, $not: { $size: 0 } } },
+        { $set: { checkedInUsers: [] } }
+      );
+      logger.info(`Auto-checkout at 2am: ${profileResult.modifiedCount} users checked out, ${eventResult.modifiedCount} events cleared`);
     } catch (err) {
       logger.error("Auto-checkout failed:", err);
     }

@@ -23,6 +23,18 @@ const curatedEventSchema = new mongoose.Schema({
       required: true,
     },
   },
+  city: {
+    type: String,
+    trim: true,
+  },
+  state: {
+    type: String,
+    trim: true,
+  },
+  zipcode: {
+    type: String,
+    trim: true,
+  },
   startTime: {
     type: Date,
     required: true,
@@ -31,6 +43,14 @@ const curatedEventSchema = new mongoose.Schema({
     type: Date,
     required: true,
   },
+  usersGoing: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'user',
+  }],
+  checkedInUsers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'user',
+  }],
   createdAt: {
     type: Date,
     default: Date.now,
@@ -42,5 +62,9 @@ curatedEventSchema.index({ location: "2dsphere" });
 
 // Index for finding active events
 curatedEventSchema.index({ startTime: 1, endTime: 1 });
+
+// Indexes for location-based filtering
+curatedEventSchema.index({ state: 1, city: 1 });
+curatedEventSchema.index({ zipcode: 1 });
 
 module.exports = mongoose.model("CuratedEvent", curatedEventSchema);
