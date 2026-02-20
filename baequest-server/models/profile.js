@@ -11,8 +11,8 @@ const profile = new mongoose.Schema({
   age: {
     type: Number,
     required: true,
-    minlength: 18,
-    maxlength: 99,
+    min: 18,
+    max: 99,
   },
 
   gender: {

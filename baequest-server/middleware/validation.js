@@ -64,8 +64,8 @@ const createProfileSchema = Joi.object({
     "number.max": "Age must not exceed 120",
     "any.required": "Age is required",
   }),
-  gender: Joi.string().valid("male", "female", "non-binary", "other").required().messages({
-    "any.only": "Gender must be one of: male, female, non-binary, other",
+  gender: Joi.string().valid("male", "female").required().messages({
+    "any.only": "Gender must be one of: male, female",
     "any.required": "Gender is required",
   }),
   sexualOrientation: Joi.string().valid("straight", "gay", "bisexual").required().messages({
@@ -109,12 +109,12 @@ const createProfileSchema = Joi.object({
     }),
   convoStarter: Joi.string()
     .min(10)
-    .max(200)
+    .max(160)
     .custom(sanitizeString)
     .required()
     .messages({
       "string.min": "Conversation starter must be at least 10 characters long",
-      "string.max": "Conversation starter must not exceed 200 characters",
+      "string.max": "Conversation starter must not exceed 160 characters",
       "string.unsafe": "Conversation starter contains invalid or unsafe characters",
       "any.required": "Conversation starter is required",
     }),
@@ -140,8 +140,8 @@ const updateProfileSchema = Joi.object({
     "number.min": "Age must be at least 18",
     "number.max": "Age must not exceed 120",
   }),
-  gender: Joi.string().valid("male", "female", "non-binary", "other").optional().messages({
-    "any.only": "Gender must be one of: male, female, non-binary, other",
+  gender: Joi.string().valid("male", "female").optional().messages({
+    "any.only": "Gender must be one of: male, female",
   }),
   sexualOrientation: Joi.string().valid("straight", "gay", "bisexual").optional().messages({
     "any.only": "Sexual orientation must be one of: straight, gay, bisexual",
@@ -180,12 +180,12 @@ const updateProfileSchema = Joi.object({
     }),
   convoStarter: Joi.string()
     .min(10)
-    .max(200)
+    .max(160)
     .custom(sanitizeString)
     .optional()
     .messages({
       "string.min": "Conversation starter must be at least 10 characters long",
-      "string.max": "Conversation starter must not exceed 200 characters",
+      "string.max": "Conversation starter must not exceed 160 characters",
       "string.unsafe": "Conversation starter contains invalid or unsafe characters",
     }),
 });

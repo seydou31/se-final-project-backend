@@ -259,15 +259,15 @@ module.exports.checkinAtEvent = async (req, res, next) => {
       await event.save();
     }
 
-    // Update profile location
-    await profile.findOneAndUpdate(
+    // Update profile location and capture the result (avoids a second DB fetch)
+    const currentUserProfile = await profile.findOneAndUpdate(
       { owner: userId },
       { location: { eventId: event._id, lat: parseFloat(lat), lng: parseFloat(lng), updatedAt: new Date() } },
       { new: true }
     );
 
-    // Compute compatibility filter (needed for both SMS and response)
-    const currentUserProfile = await profile.findOne({ owner: userId });
+    if (!currentUserProfile) throw new NotFoundError("Profile not found");
+
     const { gender: userGender, sexualOrientation } = currentUserProfile;
 
     let genderFilter = {};
