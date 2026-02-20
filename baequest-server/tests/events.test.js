@@ -209,6 +209,7 @@ describe('Event Endpoints', () => {
         bio: 'Test bio',
         interests: ['gaming'],
         convoStarter: 'Hello!',
+        phoneNumber: '+15555550001',
         owner: userId,
       });
     });
@@ -281,6 +282,7 @@ describe('Event Endpoints', () => {
         bio: 'Test bio',
         interests: ['gaming'],
         convoStarter: 'Hello!',
+        phoneNumber: '+15555550001',
         owner: userId,
         location: {
           lat: 40.7128,
