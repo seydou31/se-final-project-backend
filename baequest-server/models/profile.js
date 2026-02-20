@@ -65,6 +65,10 @@ const profile = new mongoose.Schema({
     type: String,
     default: null,
   },
+  phoneNumber: {
+    type: String,
+    required: true,
+  },
    location: {
     lat: Number,
     lng: Number,

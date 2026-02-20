@@ -7,7 +7,7 @@ const path = require('path');
 const { isS3Configured } = require('../middleware/multer');
 
 module.exports.createProfile = async (req, res, next) => {
-  const { name, age, gender, sexualOrientation, profession, bio, interests, convoStarter } = req.body;
+  const { name, age, gender, sexualOrientation, profession, bio, interests, convoStarter, phoneNumber } = req.body;
 
   try {
     const newProfile = await profile.create({
@@ -19,6 +19,7 @@ module.exports.createProfile = async (req, res, next) => {
       bio,
       interests,
       convoStarter,
+      phoneNumber,
       owner: req.user._id,
     });
     res.status(201).send(newProfile);
@@ -40,13 +41,13 @@ module.exports.getProfile = async (req, res, next) => {
 };
 
 module.exports.updateProfile = async (req, res, next) => {
-  const { name, age, gender, sexualOrientation, profession, bio, interests, convoStarter } = req.body;
+  const { name, age, gender, sexualOrientation, profession, bio, interests, convoStarter, phoneNumber } = req.body;
 
   try {
     const updatedProfile = await profile
       .findOneAndUpdate(
         { owner: req.user._id },
-        { name, age, gender, sexualOrientation, profession, bio, interests, convoStarter },
+        { name, age, gender, sexualOrientation, profession, bio, interests, convoStarter, phoneNumber },
         {
           new: true,
           runValidators: true,

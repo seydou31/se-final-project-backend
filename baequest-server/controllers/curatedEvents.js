@@ -8,6 +8,7 @@ const user = require("../models/user");
 const EventFeedback = require("../models/eventFeedback");
 const { BadRequestError, NotFoundError } = require("../utils/customErrors");
 const { sendFeedbackRequestEmail } = require("../utils/email");
+const { sendCheckinNotification } = require("../utils/sms");
 const logger = require("../utils/logger");
 const { isS3Configured } = require("../middleware/multer");
 
@@ -265,12 +266,7 @@ module.exports.checkinAtEvent = async (req, res, next) => {
       { new: true }
     );
 
-    // Emit socket event
-    const io = req.app.get("io");
-    const userProfile = await profile.findOne({ owner: userId });
-    io.to(`event_${id}`).emit("user-checked-in", { user: userProfile, eventId: id });
-
-    // Return compatible users at this event
+    // Compute compatibility filter (needed for both SMS and response)
     const currentUserProfile = await profile.findOne({ owner: userId });
     const { gender: userGender, sexualOrientation } = currentUserProfile;
 
@@ -281,6 +277,32 @@ module.exports.checkinAtEvent = async (req, res, next) => {
       genderFilter.gender = userGender;
     }
 
+    // Emit socket event
+    const io = req.app.get("io");
+    io.to(`event_${id}`).emit("user-checked-in", { user: currentUserProfile, eventId: id });
+
+    // Fire-and-forget SMS to compatible users already at this event
+    (async () => {
+      try {
+        const targets = await profile.find({
+          owner: { $in: event.checkedInUsers, $ne: userId },
+          ...genderFilter,
+        }).select('phoneNumber sexualOrientation gender');
+
+        for (const u of targets) {
+          if (!u.phoneNumber) continue;
+          const isCompat = sexualOrientation === 'bisexual' || u.sexualOrientation === 'bisexual'
+            || (u.sexualOrientation === 'straight' && u.gender !== userGender)
+            || (u.sexualOrientation === 'gay' && u.gender === userGender);
+          if (!isCompat) continue;
+          await sendCheckinNotification(u.phoneNumber, currentUserProfile.name, event.name);
+        }
+      } catch (err) {
+        logger.error('Failed to send SMS check-in notifications:', err);
+      }
+    })();
+
+    // Return compatible users at this event
     const allCheckedIn = await profile.find({
       owner: { $in: event.checkedInUsers, $ne: userId },
       ...genderFilter,
