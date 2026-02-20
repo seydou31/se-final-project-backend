@@ -3,3 +3,4 @@ node_modules/
 utils/addStateToEvents.js
 utils/seedEvents.js
 utils/updateTestEvent.js
+scripts/

@@ -234,7 +234,7 @@ describe('Complete Authentication Flow Integration Tests', () => {
 
   describe('Login Security', () => {
     test('should reject login with incorrect password', async () => {
-      const user = await User.create({
+      await User.create({
         email: 'test@example.com',
         password: await require('bcryptjs').hash('CorrectPass123!', 10),
         isEmailVerified: true
@@ -264,7 +264,7 @@ describe('Complete Authentication Flow Integration Tests', () => {
     });
 
     test('should reject login for Google OAuth user without password', async () => {
-      const user = await User.create({
+      await User.create({
         email: 'googleuser@example.com',
         googleId: '123456789',
         isEmailVerified: true

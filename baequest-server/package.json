@@ -51,7 +51,14 @@
     "winston-daily-rotate-file": "^5.0.0"
   },
   "overrides": {
-    "minimatch": "^10.2.1"
+    "@sentry/node": {
+      "minimatch": "^10.2.1"
+    },
+    "rimraf": {
+      "glob": {
+        "minimatch": "^10.2.1"
+      }
+    }
   },
   "devDependencies": {
     "@shelf/jest-mongodb": "^6.0.2",

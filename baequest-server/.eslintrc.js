@@ -15,10 +15,16 @@ module.exports = {
       },
     },
     {
-      // Jest globals for test files
+      // Jest globals and relaxed rules for test files
       files: ["tests/**/*.js"],
       env: {
         jest: true,
+      },
+      rules: {
+        "global-require": "off",
+        "no-restricted-syntax": "off",
+        "no-await-in-loop": "off",
+        "no-unused-vars": ["error", { varsIgnorePattern: "^_", argsIgnorePattern: "^(req|res|next|_)" }],
       },
     },
   ],
