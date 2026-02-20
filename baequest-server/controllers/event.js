@@ -6,6 +6,7 @@ const {
   BadRequestError,
   NotFoundError,
 } = require("../utils/customErrors");
+const feedbackController = require('./eventFeedback');
 
 module.exports.events = async (req, res, next) => {
   const now = new Date();
@@ -126,7 +127,6 @@ module.exports.eventCheckout = async (req, res, next) => {
 
     // Send feedback request email (don't block checkout if it fails)
     try {
-      const feedbackController = require('./eventFeedback');
       await feedbackController.createFeedbackRequest(
         { user: req.user, body: { eventId } },
         { status: () => ({ json: () => {} }) }, // Mock res
@@ -197,12 +197,12 @@ module.exports.markAsGoing = async (req, res, next) => {
 
     logger.info('✅ Socket.IO event emitted successfully');
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Marked as going",
       count: foundEvent.usersGoing.length,
     });
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 

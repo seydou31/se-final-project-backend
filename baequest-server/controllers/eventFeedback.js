@@ -1,7 +1,7 @@
+const crypto = require('crypto');
 const EventFeedback = require('../models/eventFeedback');
 const Event = require('../models/event');
 const User = require('../models/user');
-const crypto = require('crypto');
 const { sendFeedbackRequestEmail } = require('../utils/email');
 const { BadRequestError, NotFoundError } = require('../utils/customErrors');
 
@@ -68,12 +68,12 @@ module.exports.createFeedbackRequest = async (req, res, next) => {
     feedbackRequest.emailSentAt = new Date();
     await feedbackRequest.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       message: 'Feedback request sent successfully',
       feedbackRequestId: feedbackRequest._id,
     });
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -119,7 +119,7 @@ module.exports.getFeedbackRequest = async (req, res, next) => {
     }
 
     // Event-based feedback
-    res.status(200).json({
+    return res.status(200).json({
       eventId: feedbackRequest.eventId._id,
       eventName: feedbackRequest.eventId.title,
       eventDate: feedbackRequest.eventId.date,
@@ -128,7 +128,7 @@ module.exports.getFeedbackRequest = async (req, res, next) => {
       state: feedbackRequest.eventId.state,
     });
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 

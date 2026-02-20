@@ -1,12 +1,13 @@
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const { OAuth2Client } = require("google-auth-library");
 const user = require("../models/user");
 const profile = require("../models/profile");
 const EmailVerification = require("../models/emailVerification");
 const SECRET = require("../utils/config");
 const {
-  UnauthorizedError, BadRequestError, NotFoundError,
+  UnauthorizedError, NotFoundError,
   ConflictError
 } = require("../utils/customErrors");
 const { sendVerificationEmail, sendWelcomeEmail } = require("../utils/email");
@@ -132,7 +133,7 @@ module.exports.refreshToken = async (req, res, next) => {
       expiresIn: "7d",
     });
 
-    res
+    return res
       .cookie("jwt", newToken, {
         maxAge: 3600000 * 24 * 7,
         httpOnly: true,
@@ -148,7 +149,7 @@ module.exports.refreshToken = async (req, res, next) => {
       });
   } catch (err) {
     // Token is invalid or expired
-    next(new UnauthorizedError("Invalid or expired token"));
+    return next(new UnauthorizedError("Invalid or expired token"));
   }
 };
 
@@ -167,7 +168,7 @@ module.exports.getUsersAtEvent = async (req, res, next) => {
     const { gender: userGender, sexualOrientation } = currentUserProfile;
 
     // Build gender filter based on sexual orientation
-    let genderFilter = {};
+    const genderFilter = {};
 
     if (sexualOrientation === 'straight') {
       // Straight users see opposite gender
@@ -185,20 +186,20 @@ module.exports.getUsersAtEvent = async (req, res, next) => {
     }).select("name age gender profession bio interests location convoStarter profilePicture sexualOrientation");
 
     // Further filter to ensure mutual compatibility
-    const filteredUsers = users.filter(user => {
+    const filteredUsers = users.filter(u => {
       // If current user is bisexual, they can see everyone
       if (sexualOrientation === 'bisexual') {
         return true;
       }
 
       // Check if the other user would also want to see current user
-      if (user.sexualOrientation === 'straight') {
+      if (u.sexualOrientation === 'straight') {
         // Straight users want opposite gender
-        return user.gender !== userGender;
-      } else if (user.sexualOrientation === 'gay') {
+        return u.gender !== userGender;
+      } if (u.sexualOrientation === 'gay') {
         // Gay users want same gender
-        return user.gender === userGender;
-      } else if (user.sexualOrientation === 'bisexual') {
+        return u.gender === userGender;
+      } if (u.sexualOrientation === 'bisexual') {
         // Bisexual users are compatible with everyone
         return true;
       }
@@ -206,9 +207,9 @@ module.exports.getUsersAtEvent = async (req, res, next) => {
       return false;
     });
 
-    res.json(filteredUsers);
+    return res.json(filteredUsers);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -224,8 +225,7 @@ module.exports.deleteUser = async(req, res, next ) => {
 }
 module.exports.googleAuth = async (req, res, next) => {
   const { credential } = req.body;
-  const { OAuth2Client } = require("google-auth-library");
-  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+  const {GOOGLE_CLIENT_ID} = process.env;
 
   try {
     // Verify the Google token
@@ -237,7 +237,7 @@ module.exports.googleAuth = async (req, res, next) => {
 
     const payload = ticket.getPayload();
     const googleId = payload.sub;
-    const email = payload.email;
+    const {email} = payload;
 
     // Check if user exists
     let foundUser = await user.findOne({ $or: [{ googleId }, { email }] });
@@ -285,7 +285,7 @@ module.exports.googleAuth = async (req, res, next) => {
         },
       });
   } catch (err) {
-    next(new UnauthorizedError("Google authentication failed: " + err.message));
+    next(new UnauthorizedError(`Google authentication failed: ${  err.message}`));
   }
 };
 
@@ -307,7 +307,7 @@ module.exports.googleAuthWithToken = async (req, res, next) => {
 
     const payload = await response.json();
     const googleId = payload.id;
-    const email = payload.email;
+    const {email} = payload;
 
     if (!email) {
       throw new Error('Email not provided by Google');
@@ -359,6 +359,6 @@ module.exports.googleAuthWithToken = async (req, res, next) => {
         },
       });
   } catch (err) {
-    next(new UnauthorizedError("Google authentication failed: " + err.message));
+    next(new UnauthorizedError(`Google authentication failed: ${  err.message}`));
   }
 };

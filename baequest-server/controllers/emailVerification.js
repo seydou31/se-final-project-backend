@@ -45,12 +45,12 @@ const sendVerification = async (req, res) => {
     const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
     await sendVerificationEmail(email, verificationUrl);
 
-    res.status(200).json({
+    return res.status(200).json({
       message: 'Verification email sent successfully. Please check your inbox.'
     });
   } catch (error) {
     logger.error('Send verification error:', error);
-    res.status(500).json({ error: 'Failed to send verification email' });
+    return res.status(500).json({ error: 'Failed to send verification email' });
   }
 };
 
@@ -58,7 +58,6 @@ const sendVerification = async (req, res) => {
 const verifyEmail = async (req, res) => {
   try {
     const { token } = req.body;
-    console.log('🔍 Verifying email with token:', token ? token.substring(0, 10) + '...' : 'MISSING');
 
     if (!token) {
       return res.status(400).json({ error: 'Verification token is required' });
@@ -69,11 +68,6 @@ const verifyEmail = async (req, res) => {
       .createHash('sha256')
       .update(token)
       .digest('hex');
-    console.log('🔍 Hashed token:', hashedToken.substring(0, 10) + '...');
-
-    // Check how many verification docs exist
-    const allDocs = await EmailVerification.find({});
-    console.log('📊 Total verification documents in DB:', allDocs.length);
 
     // Find valid, unused verification token
     const verificationRequest = await EmailVerification.findOne({
@@ -81,7 +75,6 @@ const verifyEmail = async (req, res) => {
       used: false,
       expiresAt: { $gt: new Date() },
     });
-    console.log('🔍 Verification request found:', verificationRequest ? 'YES' : 'NO');
 
     if (!verificationRequest) {
       return res.status(400).json({
@@ -98,16 +91,14 @@ const verifyEmail = async (req, res) => {
     // Mark email as verified
     user.isEmailVerified = true;
     await user.save();
-    console.log('✅ User email marked as verified');
 
     // Delete all verification tokens for this user (including the current one)
     await EmailVerification.deleteMany({ userId: user._id });
-    console.log('✅ Verification tokens deleted');
 
-    res.status(200).json({ message: 'Email verified successfully' });
+    return res.status(200).json({ message: 'Email verified successfully' });
   } catch (error) {
     logger.error('Email verification error:', error);
-    res.status(500).json({ error: 'Failed to verify email' });
+    return res.status(500).json({ error: 'Failed to verify email' });
   }
 };
 

@@ -51,12 +51,12 @@ const requestPasswordReset = async (req, res) => {
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
     await sendPasswordResetEmail(email, resetUrl);
 
-    res.status(200).json({
+    return res.status(200).json({
       message: 'If an account with that email exists, a password reset link has been sent.'
     });
   } catch (error) {
     logger.error('Password reset request error:', error);
-    res.status(500).json({ error: 'Failed to process password reset request' });
+    return res.status(500).json({ error: 'Failed to process password reset request' });
   }
 };
 
@@ -108,7 +108,7 @@ const resetPassword = async (req, res) => {
     // Delete all reset tokens for this user
     await PasswordReset.deleteMany({ userId: user._id });
 
-    res.status(200).json({ message: 'Password successfully reset' });
+    return res.status(200).json({ message: 'Password successfully reset' });
   } catch (error) {
     logger.error('Password reset error:', error);
 
@@ -117,7 +117,7 @@ const resetPassword = async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    res.status(500).json({ error: 'Failed to reset password' });
+    return res.status(500).json({ error: 'Failed to reset password' });
   }
 };
 

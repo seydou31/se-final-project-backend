@@ -38,7 +38,7 @@ const getCoordinatesFromAddress = async (address) => {
     throw new BadRequestError("Could not find address. Please check the address and try again.");
   }
 
-  const location = data.candidates[0].geometry.location;
+  const {location} = data.candidates[0].geometry;
   return { lat: location.lat, lng: location.lng };
 };
 
@@ -63,12 +63,12 @@ async function uploadEventPhoto(file) {
       ContentType: file.mimetype,
     }));
     return `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION || "us-east-1"}.amazonaws.com/${key}`;
-  } else {
+  } 
     const uploadDir = path.join(__dirname, "..", "uploads", "event-photos");
     await fs.mkdir(uploadDir, { recursive: true });
     await fs.writeFile(path.join(uploadDir, uniqueName), file.buffer);
     return `/uploads/event-photos/${uniqueName}`;
-  }
+  
 }
 
 // Create a new curated event (public - no auth required)
@@ -91,7 +91,7 @@ module.exports.createEvent = async (req, res, next) => {
     const start = new Date(startTime);
     const end = new Date(endTime);
 
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
       throw new BadRequestError("Invalid date format");
     }
 
@@ -270,7 +270,7 @@ module.exports.checkinAtEvent = async (req, res, next) => {
 
     const { gender: userGender, sexualOrientation } = currentUserProfile;
 
-    let genderFilter = {};
+    const genderFilter = {};
     if (sexualOrientation === 'straight') {
       genderFilter.gender = userGender === 'male' ? 'female' : 'male';
     } else if (sexualOrientation === 'gay') {
@@ -289,14 +289,16 @@ module.exports.checkinAtEvent = async (req, res, next) => {
           ...genderFilter,
         }).select('phoneNumber sexualOrientation gender');
 
-        for (const u of targets) {
-          if (!u.phoneNumber) continue;
-          const isCompat = sexualOrientation === 'bisexual' || u.sexualOrientation === 'bisexual'
+        const compatible = targets.filter(u => {
+          if (!u.phoneNumber) return false;
+          return sexualOrientation === 'bisexual' || u.sexualOrientation === 'bisexual'
             || (u.sexualOrientation === 'straight' && u.gender !== userGender)
             || (u.sexualOrientation === 'gay' && u.gender === userGender);
-          if (!isCompat) continue;
-          await sendCheckinNotification(u.phoneNumber, currentUserProfile.name, event.name);
-        }
+        });
+
+        await Promise.allSettled(
+          compatible.map(u => sendCheckinNotification(u.phoneNumber, currentUserProfile.name, event.name))
+        );
       } catch (err) {
         logger.error('Failed to send SMS check-in notifications:', err);
       }
@@ -317,9 +319,9 @@ module.exports.checkinAtEvent = async (req, res, next) => {
     });
 
     logger.info(`User ${userId} checked in at event ${id}`);
-    res.status(200).json({ message: "Checked in successfully", users: compatibleUsers });
+    return res.status(200).json({ message: "Checked in successfully", users: compatibleUsers });
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -399,7 +401,7 @@ module.exports.getUsersAtEvent = async (req, res, next) => {
 
     const { gender: userGender, sexualOrientation } = currentUserProfile;
 
-    let genderFilter = {};
+    const genderFilter = {};
     if (sexualOrientation === 'straight') {
       genderFilter.gender = userGender === 'male' ? 'female' : 'male';
     } else if (sexualOrientation === 'gay') {
@@ -419,9 +421,9 @@ module.exports.getUsersAtEvent = async (req, res, next) => {
       return false;
     });
 
-    res.status(200).json(compatibleUsers);
+    return res.status(200).json(compatibleUsers);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 

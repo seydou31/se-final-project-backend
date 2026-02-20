@@ -80,7 +80,7 @@ const validateFileType = async (req, res, next) => {
     req.validatedFileType = fileType;
 
     logger.info(`File validated: ${fileType.mime}, size: ${(fileSize / 1024).toFixed(2)}KB`);
-    next();
+    return next();
   } catch (error) {
     logger.error('File validation error:', error);
 
@@ -89,7 +89,7 @@ const validateFileType = async (req, res, next) => {
       await fs.unlink(req.file.path).catch(() => {});
     }
 
-    res.status(500).json({ error: 'File validation failed' });
+    return res.status(500).json({ error: 'File validation failed' });
   }
 };
 
@@ -168,7 +168,7 @@ const optimizeImage = async (req, res, next) => {
 
     logger.info(`Image optimized: ${(originalSize / 1024).toFixed(2)}KB → ${(newSize / 1024).toFixed(2)}KB (${savings}% reduction)`);
 
-    next();
+    return next();
   } catch (error) {
     logger.error('Image optimization error:', error);
 
@@ -177,7 +177,7 @@ const optimizeImage = async (req, res, next) => {
       await fs.unlink(req.file.path).catch(() => {});
     }
 
-    res.status(500).json({ error: 'Image processing failed' });
+    return res.status(500).json({ error: 'Image processing failed' });
   }
 };
 
@@ -206,7 +206,7 @@ const sanitizeFilename = (req, res, next) => {
 
   logger.debug(`Generated secure filename: ${secureFilename}`);
 
-  next();
+  return next();
 };
 
 module.exports = {

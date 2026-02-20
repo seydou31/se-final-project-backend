@@ -1,9 +1,9 @@
+const fs = require('fs').promises;
+const path = require('path');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const profile = require("../models/profile");
 const logger = require("../utils/logger");
 const { NotFoundError } = require("../utils/customErrors");
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-const fs = require('fs').promises;
-const path = require('path');
 const { isS3Configured } = require('../middleware/multer');
 
 module.exports.createProfile = async (req, res, next) => {
@@ -82,7 +82,7 @@ module.exports.uploadProfilePicture = async (req, res, next) => {
     // File has been validated and optimized by middleware
     // Now save to S3 or local disk
     let profilePictureUrl;
-    const secureFilename = req.secureFilename;
+    const {secureFilename} = req;
     const fileBuffer = req.file.buffer;
 
     if (isS3Configured) {
@@ -140,7 +140,7 @@ module.exports.uploadProfilePicture = async (req, res, next) => {
         throw new NotFoundError("Profile not found");
       });
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Profile picture uploaded successfully",
       profilePicture: profilePictureUrl,
       profile: updatedProfile,
@@ -150,6 +150,6 @@ module.exports.uploadProfilePicture = async (req, res, next) => {
     });
   } catch (err) {
     logger.error('Profile picture upload error:', err);
-    next(err);
+    return next(err);
   }
 };

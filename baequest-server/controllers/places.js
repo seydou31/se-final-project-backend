@@ -61,9 +61,9 @@ module.exports.getNearbyPlaces = async (req, res, next) => {
     );
 
     logger.info(`Found ${placesWithCounts.length} nearby places for location ${lat}, ${lng}`);
-    res.status(200).json(placesWithCounts);
+    return res.status(200).json(placesWithCounts);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -96,9 +96,9 @@ module.exports.getPlacePhoto = async (req, res, next) => {
     res.set('Access-Control-Allow-Origin', '*'); // Allow any origin for images
 
     const buffer = await response.arrayBuffer();
-    res.send(Buffer.from(buffer));
+    return res.send(Buffer.from(buffer));
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -263,7 +263,7 @@ module.exports.getUsersAtPlace = async (req, res, next) => {
     const { gender: userGender, sexualOrientation } = currentUserProfile;
 
     // Build gender filter based on sexual orientation
-    let genderFilter = {};
+    const genderFilter = {};
 
     if (sexualOrientation === 'straight') {
       // Straight users see opposite gender
@@ -282,20 +282,20 @@ module.exports.getUsersAtPlace = async (req, res, next) => {
     }).select("name age gender profession bio interests location convoStarter profilePicture sexualOrientation");
 
     // Further filter to ensure mutual compatibility
-    const filteredUsers = users.filter(user => {
+    const filteredUsers = users.filter(u => {
       // If current user is bisexual, they can see everyone
       if (sexualOrientation === 'bisexual') {
         return true;
       }
 
       // Check if the other user would also want to see current user
-      if (user.sexualOrientation === 'straight') {
+      if (u.sexualOrientation === 'straight') {
         // Straight users want opposite gender
-        return user.gender !== userGender;
-      } else if (user.sexualOrientation === 'gay') {
+        return u.gender !== userGender;
+      } if (u.sexualOrientation === 'gay') {
         // Gay users want same gender
-        return user.gender === userGender;
-      } else if (user.sexualOrientation === 'bisexual') {
+        return u.gender === userGender;
+      } if (u.sexualOrientation === 'bisexual') {
         // Bisexual users are compatible with everyone
         return true;
       }
@@ -304,8 +304,8 @@ module.exports.getUsersAtPlace = async (req, res, next) => {
     });
 
     logger.info(`Found ${filteredUsers.length} compatible users at place ${placeId}`);
-    res.status(200).json(filteredUsers);
+    return res.status(200).json(filteredUsers);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };

@@ -91,6 +91,15 @@ app.use('/uploads', express.static('uploads'));
 
 app.use("/", mainRoute);
 
+// Health check endpoint for Docker HEALTHCHECK and load balancers
+app.get("/health", (req, res) => {
+  const mongoStatus = mongoose.connection.readyState;
+  if (mongoStatus !== 1) {
+    return res.status(503).json({ status: "unhealthy", mongo: "disconnected" });
+  }
+  return res.status(200).json({ status: "healthy", mongo: "connected" });
+});
+
 app.use((req, res) => {
   res
     .status(STATUS.NOT_FOUND)

@@ -1,0 +1,5 @@
+node_modules/
+# One-off data migration and seeding scripts — not part of the main app
+utils/addStateToEvents.js
+utils/seedEvents.js
+utils/updateTestEvent.js
