@@ -14,7 +14,7 @@ const user = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: function() {
+    required() {
       // Password is only required if googleId is not present
       return !this.googleId;
     },

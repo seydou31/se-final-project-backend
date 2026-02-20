@@ -50,10 +50,12 @@ router.delete('/deleteUser', auth, deleteUser);
 
 // Curated events routes
 const curatedEventsRouter = require('./curatedEvents');
+
 router.use('/events', curatedEventsRouter);
 
 // Event feedback routes
 const eventFeedbackRouter = require('./eventFeedback');
+
 router.use('/events', eventFeedbackRouter);
 
 module.exports = router;
