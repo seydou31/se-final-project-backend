@@ -132,7 +132,8 @@ describe('Complete Authentication Flow Integration Tests', () => {
         profession: 'Software Engineer',
         bio: 'Test bio',
         interests: ['travel', 'hiking'],
-        convoStarter: 'What is your favorite programming language?'
+        convoStarter: 'What is your favorite programming language?',
+        phoneNumber: '+15555550001',
       };
 
       const profileResponse = await request(app)

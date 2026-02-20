@@ -71,6 +71,7 @@ describe('Profile Endpoints', () => {
         bio: 'I love coding',
         interests: ['gaming', 'hiking', 'coffee'],
         convoStarter: 'What do you do for fun?',
+        phoneNumber: '+15555550001',
       };
 
       const res = await request(app)
@@ -161,6 +162,7 @@ describe('Profile Endpoints', () => {
           bio: 'Creative soul',
           interests: ['art', 'gaming', 'travel'],
           convoStarter: 'Favorite travel destination?',
+          phoneNumber: '+15555550002',
         });
 
       expect(res.status).toBe(201);
@@ -179,6 +181,7 @@ describe('Profile Endpoints', () => {
         bio: 'I love coding',
         interests: ['gaming', 'hiking'],
         convoStarter: 'What do you do?',
+        phoneNumber: '+15555550001',
         owner: userId,
       });
     });
@@ -226,6 +229,7 @@ describe('Profile Endpoints', () => {
         bio: 'I love coding',
         interests: ['gaming', 'hiking'],
         convoStarter: 'What do you do?',
+        phoneNumber: '+15555550001',
         owner: userId,
       });
     });
@@ -243,6 +247,7 @@ describe('Profile Endpoints', () => {
           bio: 'I love coding and teaching',
           interests: ['gaming', 'travel', 'coffee'],
           convoStarter: 'What are you working on?',
+          phoneNumber: '+15555550001',
         });
 
       expect(res.status).toBe(200);
@@ -265,6 +270,7 @@ describe('Profile Endpoints', () => {
           bio: 'I love coding',
           interests: ['gaming', 'hiking'],
           convoStarter: 'What do you do?',
+          phoneNumber: '+15555550001',
         });
 
       expect(res.status).toBe(200);
@@ -332,6 +338,7 @@ describe('Profile Endpoints', () => {
         bio: 'I love coding',
         interests: ['gaming', 'hiking'],
         convoStarter: 'What do you do?',
+        phoneNumber: '+15555550001',
         owner: userId,
       });
     });
