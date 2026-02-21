@@ -12,6 +12,7 @@ const {
 const {requestPasswordReset, resetPassword} = require('../controllers/passwordReset');
 const {sendVerification, verifyEmail} = require('../controllers/emailVerification');
 const auth = require('../middleware/auth');
+const { authLimiter } = require('../middleware/rateLimiter');
 const {
   validate,
   createUserSchema,
@@ -19,15 +20,15 @@ const {
 } = require('../middleware/validation');
 
 router.use('/users', userRouter);
-router.post('/signup', validate(createUserSchema), createUser);
-router.post('/signin', validate(loginSchema), login);
+router.post('/signup', authLimiter, validate(createUserSchema), createUser);
+router.post('/signin', authLimiter, validate(loginSchema), login);
 router.post('/logout', logout);
 router.post('/refresh-token', refreshToken);
-router.post('/auth/google', googleAuth);
-router.post('/auth/google/token', googleAuthWithToken);
-router.post('/password-reset/request', requestPasswordReset);
+router.post('/auth/google', authLimiter, googleAuth);
+router.post('/auth/google/token', authLimiter, googleAuthWithToken);
+router.post('/password-reset/request', authLimiter, requestPasswordReset);
 router.post('/password-reset/reset', resetPassword);
-router.post('/email-verification/send', sendVerification);
+router.post('/email-verification/send', authLimiter, sendVerification);
 router.post('/email-verification/verify', verifyEmail);
 
 router.delete('/deleteUser', auth, deleteUser);

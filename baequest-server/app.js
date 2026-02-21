@@ -79,8 +79,8 @@ const limiter = rateLimit({
   max: 500, // Increased for development; adjust for production
   standardHeaders: true,
   legacyHeaders: false,
-  // Trust proxy is enabled, so validate it
-  validate: { trustProxy: false }
+  // Trust proxy is enabled via app.set('trust proxy', true)
+  validate: { trustProxy: true }
 });
 app.use(limiter);
 app.use(express.json());
@@ -113,7 +113,7 @@ if (process.env.SENTRY_DSN) {
 
 app.use(errorHandler);
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/baequest-db";
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://host.docker.internal:27017/baequest-db";
 
 // Auto-checkout all users at 2am daily
 function scheduleAutoCheckout() {

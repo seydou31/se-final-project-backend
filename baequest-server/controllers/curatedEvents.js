@@ -9,6 +9,7 @@ const EventFeedback = require("../models/eventFeedback");
 const { BadRequestError, NotFoundError } = require("../utils/customErrors");
 const { sendFeedbackRequestEmail } = require("../utils/email");
 const { sendCheckinNotification } = require("../utils/sms");
+const { decryptPhone } = require("../utils/crypto");
 const logger = require("../utils/logger");
 const { isS3Configured } = require("../middleware/multer");
 
@@ -297,7 +298,11 @@ module.exports.checkinAtEvent = async (req, res, next) => {
         });
 
         await Promise.allSettled(
-          compatible.map(u => sendCheckinNotification(u.phoneNumber, currentUserProfile.name, event.name))
+          compatible.map(u => {
+            let phone = u.phoneNumber;
+            try { phone = decryptPhone(phone); } catch (e) { /* leave as-is */ }
+            return sendCheckinNotification(phone, currentUserProfile.name, event.name);
+          })
         );
       } catch (err) {
         logger.error('Failed to send SMS check-in notifications:', err);

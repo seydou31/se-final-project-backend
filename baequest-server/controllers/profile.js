@@ -5,6 +5,7 @@ const profile = require("../models/profile");
 const logger = require("../utils/logger");
 const { NotFoundError } = require("../utils/customErrors");
 const { isS3Configured } = require('../middleware/multer');
+const { encryptPhone, decryptPhone } = require('../utils/crypto');
 
 module.exports.createProfile = async (req, res, next) => {
   const { name, age, gender, sexualOrientation, profession, bio, interests, convoStarter, phoneNumber } = req.body;
@@ -19,7 +20,7 @@ module.exports.createProfile = async (req, res, next) => {
       bio,
       interests,
       convoStarter,
-      phoneNumber,
+      phoneNumber: phoneNumber ? encryptPhone(phoneNumber) : phoneNumber,
       owner: req.user._id,
     });
     res.status(201).send(newProfile);
@@ -34,7 +35,11 @@ module.exports.getProfile = async (req, res, next) => {
       throw new NotFoundError("Profile not found");
     });
     logger.debug(`Profile found for user: ${req.user._id}`);
-    res.status(200).send(userProfile);
+    const profileObj = userProfile.toObject();
+    if (profileObj.phoneNumber) {
+      try { profileObj.phoneNumber = decryptPhone(profileObj.phoneNumber); } catch (e) { /* leave as-is */ }
+    }
+    res.status(200).send(profileObj);
   } catch (err) {
     next(err);
   }
@@ -47,7 +52,8 @@ module.exports.updateProfile = async (req, res, next) => {
     const updatedProfile = await profile
       .findOneAndUpdate(
         { owner: req.user._id },
-        { name, age, gender, sexualOrientation, profession, bio, interests, convoStarter, phoneNumber },
+        { name, age, gender, sexualOrientation, profession, bio, interests, convoStarter,
+          phoneNumber: phoneNumber ? encryptPhone(phoneNumber) : phoneNumber },
         {
           new: true,
           runValidators: true,
@@ -56,7 +62,11 @@ module.exports.updateProfile = async (req, res, next) => {
       .orFail(() => {
         throw new NotFoundError("Profile not found");
       });
-    res.send(updatedProfile);
+    const profileObj = updatedProfile.toObject();
+    if (profileObj.phoneNumber) {
+      try { profileObj.phoneNumber = decryptPhone(profileObj.phoneNumber); } catch (e) { /* leave as-is */ }
+    }
+    res.send(profileObj);
   } catch (err) {
     next(err);
   }
