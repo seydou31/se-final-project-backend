@@ -9,8 +9,8 @@ jest.mock('../middleware/multer', () => ({
 jest.mock('@aws-sdk/client-s3', () => {
   const mockSend = jest.fn().mockResolvedValue({});
   const MockS3Client = jest.fn().mockImplementation(() => ({ send: mockSend }));
-  MockS3Client.__mockSend = mockSend;
-  return {
+  
+  return { getS3SendMock: () => mockSend,
     S3Client: MockS3Client,
     PutObjectCommand: jest.fn().mockImplementation((params) => ({ ...params })),
   };
@@ -25,7 +25,7 @@ const express = require('express');
 const request = require('supertest');
 const mongoose = require('mongoose');
 const profileController = require('../controllers/profile');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, getS3SendMock } = require('@aws-sdk/client-s3');
 const { NotFoundError } = require('../utils/customErrors');
 
 const fakeUserId = new mongoose.Types.ObjectId();
@@ -126,7 +126,7 @@ describe('uploadProfilePicture — S3 storage', () => {
     );
 
     // Verify send was actually called
-    expect(S3Client.__mockSend).toHaveBeenCalled();
+    expect(getS3SendMock()).toHaveBeenCalled();
   });
 
   it('should return 404 when the profile does not exist', async () => {
