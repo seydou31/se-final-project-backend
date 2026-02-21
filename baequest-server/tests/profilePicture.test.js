@@ -5,15 +5,20 @@ jest.mock('../middleware/multer', () => ({
   isS3Configured: false,
 }));
 
-jest.mock('fs', () => ({
-  // Preserve all real fs methods (existsSync, statSync, etc.) so that
-  // winston-daily-rotate-file and other transitive deps continue to work.
-  ...jest.requireActual('fs'),
-  promises: {
-    mkdir: jest.fn().mockResolvedValue(undefined),
-    writeFile: jest.fn().mockResolvedValue(undefined),
-  },
-}));
+jest.mock('fs', () => {
+  const actualFs = jest.requireActual('fs');
+  return {
+    // Preserve all real fs methods (existsSync, statSync, etc.) so that
+    // winston-daily-rotate-file and other transitive deps continue to work.
+    ...actualFs,
+    promises: {
+      // Preserve all real promise-based methods (stat, readFile, etc.)
+      ...actualFs.promises,
+      mkdir: jest.fn().mockResolvedValue(undefined),
+      writeFile: jest.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 const mockFindOneAndUpdate = jest.fn();
 jest.mock('../models/profile', () => ({
