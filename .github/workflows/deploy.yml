@@ -107,58 +107,60 @@ jobs:
           # Runner expands ${DOWNLOAD_URL}; \$ passes $ through to the remote shell.
           cat > /tmp/deploy.sh << DEPLOY_SCRIPT
           #!/bin/bash
-          set -euo pipefail
+          set -eo pipefail
 
           DOWNLOAD_URL="${DOWNLOAD_URL}"
+          ACTIVE_PORT_FILE="/home/badiakaseydou/.active-port"
 
-          rollback() {
-            echo "=== Rolling back to previous image ==="
-            docker stop baequest-backend 2>/dev/null || true
-            docker rm baequest-backend 2>/dev/null || true
-            if docker image inspect baequest-backend:previous > /dev/null 2>&1; then
-              fuser -k 3001/tcp 2>/dev/null || true
-              docker run -d --name baequest-backend \
-                -p 3001:3001 \
-                --restart=unless-stopped \
-                --env-file /home/badiakaseydou/.env \
-                baequest-backend:previous || true
-              echo "ROLLBACK_COMPLETE"
-            else
-              echo "No previous image available for rollback"
-            fi
-          }
+          # Determine blue-green ports and container names
+          if [ -f "\$ACTIVE_PORT_FILE" ]; then
+            OLD_PORT=\$(cat "\$ACTIVE_PORT_FILE")
+          else
+            OLD_PORT=3001
+          fi
 
-          # Tag current image as rollback point before making any changes
+          if [ "\$OLD_PORT" = "3001" ]; then
+            NEW_PORT=3002
+            OLD_NAME="baequest-backend-a"
+            NEW_NAME="baequest-backend-b"
+          else
+            NEW_PORT=3001
+            OLD_NAME="baequest-backend-b"
+            NEW_NAME="baequest-backend-a"
+          fi
+
+          echo "Blue-green: \$OLD_NAME (port \$OLD_PORT) → \$NEW_NAME (port \$NEW_PORT)"
+
+          # Normalize legacy container name on first deploy with this scheme
+          docker rename baequest-backend "\$OLD_NAME" 2>/dev/null || true
+
+          # Tag current image as rollback point
           docker tag baequest-backend:latest baequest-backend:previous 2>/dev/null || true
 
-          # Stop and remove old container
-          docker stop baequest-backend 2>/dev/null || true
-          docker rm baequest-backend 2>/dev/null || true
-
-          # Clean up dangling images and stopped containers (preserve tagged images for rollback)
+          # Clean up dangling images and stopped containers (old container still serving)
           journalctl --vacuum-size=50M 2>/dev/null || true
           docker container prune -f 2>/dev/null || true
           docker image prune -f 2>/dev/null || true
 
-          # Load new image
+          # Load new image while old container still serves traffic
           curl -sL "\$DOWNLOAD_URL" | docker load || { echo "LOAD_FAILED"; df -h /; exit 1; }
 
-          # Free port in case something else grabbed it
-          fuser -k 3001/tcp 2>/dev/null || true
+          # Free the new port in case something grabbed it
+          fuser -k "\${NEW_PORT}/tcp" 2>/dev/null || true
 
-          # Start new container
-          docker run -d --name baequest-backend \
-            -p 3001:3001 \
+          # Start new container on alternate port (old container still up and serving)
+          docker run -d --name "\$NEW_NAME" \
+            -p "\${NEW_PORT}:3001" \
             --restart=unless-stopped \
             --env-file /home/badiakaseydou/.env \
-            baequest-backend:latest || { echo "Container failed to start"; rollback; exit 1; }
+            baequest-backend:latest || { echo "New container failed to start"; exit 1; }
 
-          # Health check with retries (5 attempts x 5s = up to 25s)
-          echo "Running health checks..."
+          # Health check new container before touching nginx
+          echo "Health checking new container on port \$NEW_PORT..."
           HEALTHY=0
           for i in 1 2 3 4 5; do
             sleep 5
-            if curl -sf http://localhost:3001/health > /dev/null 2>&1; then
+            if curl -sf "http://localhost:\${NEW_PORT}/health" > /dev/null 2>&1; then
               HEALTHY=1
               echo "Health check passed on attempt \$i"
               break
@@ -167,12 +169,26 @@ jobs:
           done
 
           if [ "\$HEALTHY" -ne 1 ]; then
-            echo "Health checks failed after 5 attempts"
-            rollback
+            echo "Health checks failed — old container still serving on port \$OLD_PORT"
+            docker stop "\$NEW_NAME" 2>/dev/null || true
+            docker rm "\$NEW_NAME" 2>/dev/null || true
             exit 1
           fi
 
-          # Deploy successful — clean up previous image to free disk
+          # Switch nginx to new container (graceful reload, no dropped connections)
+          sudo sed -i "s|proxy_pass http://localhost:300[12];|proxy_pass http://localhost:\${NEW_PORT};|" \
+            /etc/nginx/sites-enabled/baequests.com
+          sudo nginx -s reload
+          echo "Nginx switched to port \$NEW_PORT"
+
+          # Stop old container (traffic already routed away)
+          docker stop "\$OLD_NAME" 2>/dev/null || true
+          docker rm "\$OLD_NAME" 2>/dev/null || true
+
+          # Record new active port for next deploy
+          echo "\$NEW_PORT" > "\$ACTIVE_PORT_FILE"
+
+          # Clean up previous image to free disk
           docker rmi baequest-backend:previous 2>/dev/null || true
           echo "RUN_EXIT=0"
           docker ps
