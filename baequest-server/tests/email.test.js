@@ -11,7 +11,7 @@ jest.mock('resend', () => {
   return { Resend: MockResend, getEmailSendMock: () => mockSend };
 });
 
-const { Resend, getEmailSendMock } = require('resend');
+const { getEmailSendMock } = require('resend');
 const {
   sendPasswordResetEmail,
   sendVerificationEmail,

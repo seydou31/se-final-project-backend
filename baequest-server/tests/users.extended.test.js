@@ -5,9 +5,7 @@ jest.mock('google-auth-library', () => {
   const MockOAuth2Client = jest.fn().mockImplementation(() => ({
     verifyIdToken: mockVerifyIdToken,
   }));
-  // Store on constructor so tests can reconfigure it
-  MockOAuth2Client.__mockVerifyIdToken = mockVerifyIdToken;
-  return { OAuth2Client: MockOAuth2Client };
+  return { OAuth2Client: MockOAuth2Client, getVerifyIdToken: () => mockVerifyIdToken };
 });
 
 const request = require('supertest');
@@ -17,11 +15,11 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { OAuth2Client, getVerifyIdToken } = require('google-auth-library');
 
 const User = require('../models/user');
 const usersController = require('../controllers/users');
 const SECRET = require('../utils/config');
-const { OAuth2Client } = require('google-auth-library');
 
 let mongoServer;
 let app;
@@ -106,7 +104,7 @@ describe('POST /refresh - refreshToken', () => {
 describe('POST /auth/google - googleAuth', () => {
   function mockGooglePayload(payload) {
     const mockTicket = { getPayload: () => payload };
-    OAuth2Client.__mockVerifyIdToken.mockResolvedValue(mockTicket);
+    getVerifyIdToken().mockResolvedValue(mockTicket);
   }
 
   it('should create a new user and return 200 for an unknown Google account', async () => {
@@ -146,7 +144,7 @@ describe('POST /auth/google - googleAuth', () => {
   });
 
   it('should return 401 when Google token verification fails', async () => {
-    OAuth2Client.__mockVerifyIdToken.mockRejectedValue(new Error('Token expired'));
+    getVerifyIdToken().mockRejectedValue(new Error('Token expired'));
 
     const res = await request(app)
       .post('/auth/google')

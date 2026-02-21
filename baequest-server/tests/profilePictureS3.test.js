@@ -24,8 +24,8 @@ jest.mock('../models/profile', () => ({
 const express = require('express');
 const request = require('supertest');
 const mongoose = require('mongoose');
-const profileController = require('../controllers/profile');
 const { S3Client, PutObjectCommand, getS3SendMock } = require('@aws-sdk/client-s3');
+const profileController = require('../controllers/profile');
 const { NotFoundError } = require('../utils/customErrors');
 
 const fakeUserId = new mongoose.Types.ObjectId();
