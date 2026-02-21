@@ -1,6 +1,10 @@
 module.exports = {
   testEnvironment: 'node',
   coverageDirectory: 'coverage',
+  moduleNameMapper: {
+    // file-type v21 uses ESM exports not resolvable by Jest's CommonJS runner
+    '^file-type$': '<rootDir>/__mocks__/file-type.js',
+  },
   collectCoverageFrom: [
     'controllers/**/*.js',
     'middleware/**/*.js',
@@ -8,7 +12,6 @@ module.exports = {
     'routes/**/*.js',
     'utils/**/*.js',
     '!utils/logger.js',
-    '!utils/seedEvents.js',
   ],
   testMatch: [
     '**/__tests__/**/*.js',
