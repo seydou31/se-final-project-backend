@@ -114,7 +114,6 @@ jobs:
              if [ \$LOAD_EXIT -ne 0 ]; then echo LOAD_FAILED; df -h /; exit 1; fi; \
              fuser -k 3001/tcp 2>/dev/null || true; \
              docker run -d --name baequest-backend \
-               --add-host=host.docker.internal:host-gateway \
                -p 3001:3001 \
                --restart=unless-stopped \
                --env-file /home/badiakaseydou/.env \

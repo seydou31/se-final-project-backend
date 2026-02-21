@@ -113,7 +113,7 @@ if (process.env.SENTRY_DSN) {
 
 app.use(errorHandler);
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://host.docker.internal:27017/baequest-db";
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/baequest-db";
 
 // Auto-checkout all users at 2am daily
 function scheduleAutoCheckout() {
