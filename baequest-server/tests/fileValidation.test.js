@@ -1,29 +1,9 @@
-// file-type v21 is ESM-only; Jest resolves it via moduleNameMapper → __mocks__/file-type.js
-// so fileTypeFromBuffer is already a jest.fn() — no jest.mock() call needed here.
+// file-type and sharp are both mocked via moduleNameMapper → __mocks__/*.js
+// This keeps the tests cross-platform (no native binaries required in CI).
 
-const sharp = require('sharp');
 const mongoose = require('mongoose');
 const { fileTypeFromBuffer } = require('file-type');
 const { validateFileType, optimizeImage, sanitizeFilename } = require('../middleware/fileValidation');
-
-// ─── Shared test buffers ──────────────────────────────────────────────────────
-
-let validJpegBuffer;
-let validPngBuffer;
-
-beforeAll(async () => {
-  validJpegBuffer = await sharp({
-    create: { width: 100, height: 100, channels: 3, background: { r: 200, g: 100, b: 50 } },
-  })
-    .jpeg()
-    .toBuffer();
-
-  validPngBuffer = await sharp({
-    create: { width: 80, height: 80, channels: 4, background: { r: 0, g: 200, b: 100, alpha: 1 } },
-  })
-    .png()
-    .toBuffer();
-});
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -133,6 +113,8 @@ describe('validateFileType', () => {
 // ─── optimizeImage ────────────────────────────────────────────────────────────
 
 describe('optimizeImage', () => {
+  afterEach(() => jest.clearAllMocks());
+
   it('should call next immediately when no file is present', async () => {
     const req = { file: null };
     const res = makeRes();
@@ -143,9 +125,9 @@ describe('optimizeImage', () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 
-  it('should process a valid JPEG, update the buffer, and call next', async () => {
+  it('should process a JPEG buffer, update req.file.buffer, and call next', async () => {
     const req = {
-      file: { buffer: validJpegBuffer, size: validJpegBuffer.length, originalname: 'photo.jpg' },
+      file: { buffer: Buffer.alloc(64), size: 64, originalname: 'photo.jpg' },
       validatedFileType: { mime: 'image/jpeg' },
     };
     const res = makeRes();
@@ -158,9 +140,9 @@ describe('optimizeImage', () => {
     expect(req.file.size).toBe(req.file.buffer.length);
   });
 
-  it('should process a valid PNG, update the buffer, and call next', async () => {
+  it('should process a PNG buffer, update req.file.buffer, and call next', async () => {
     const req = {
-      file: { buffer: validPngBuffer, size: validPngBuffer.length, originalname: 'image.png' },
+      file: { buffer: Buffer.alloc(64), size: 64, originalname: 'image.png' },
       validatedFileType: { mime: 'image/png' },
     };
     const res = makeRes();
