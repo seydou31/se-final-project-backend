@@ -4,14 +4,14 @@
 jest.mock('@aws-sdk/client-sns', () => {
   const mockSend = jest.fn().mockResolvedValue({});
   const MockSNSClient = jest.fn().mockImplementation(() => ({ send: mockSend }));
-  MockSNSClient.__mockSend = mockSend;
   return {
+    getSNSSendMock: () => mockSend,
     SNSClient: MockSNSClient,
     PublishCommand: jest.fn().mockImplementation((params) => ({ ...params })),
   };
 });
 
-const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
+const { SNSClient, PublishCommand, getSNSSendMock } = require('@aws-sdk/client-sns');
 const { sendCheckinNotification } = require('../utils/sms');
 
 afterEach(() => {
@@ -30,7 +30,7 @@ describe('sendCheckinNotification', () => {
     await sendCheckinNotification('+12025551234', 'Alice', 'Test Event');
 
     expect(SNSClient).not.toHaveBeenCalled();
-    expect(SNSClient.__mockSend).not.toHaveBeenCalled();
+    expect(getSNSSendMock()).not.toHaveBeenCalled();
   });
 
   it('should send an SMS with the correct message when AWS credentials are present', async () => {
@@ -63,7 +63,7 @@ describe('sendCheckinNotification', () => {
       })
     );
 
-    expect(SNSClient.__mockSend).toHaveBeenCalled();
+    expect(getSNSSendMock()).toHaveBeenCalled();
   });
 
   it('should default to us-east-1 when AWS_REGION is not set', async () => {
