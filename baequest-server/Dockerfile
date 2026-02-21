@@ -5,6 +5,9 @@ RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
+# package-lock.json may contain glibc-specific sharp binaries (generated on macOS/Linux).
+# Explicitly reinstall the musl-x64 binary so it works inside Alpine.
+RUN npm install --os=linux --libc=musl --cpu=x64 sharp
 
 # Stage 2: Production runtime
 FROM node:20-alpine AS production
