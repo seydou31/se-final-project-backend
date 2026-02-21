@@ -76,6 +76,7 @@ const logger = winston.createLogger({
   format,
   transports: [allLogsTransport, errorTransport, consoleTransport],
   exceptionHandlers: [
+    new winston.transports.Console({ format: consoleFormat }),
     new DailyRotateFile({
       filename: "logs/exceptions-%DATE%.log",
       datePattern: "YYYY-MM-DD",
@@ -84,6 +85,7 @@ const logger = winston.createLogger({
     }),
   ],
   rejectionHandlers: [
+    new winston.transports.Console({ format: consoleFormat }),
     new DailyRotateFile({
       filename: "logs/rejections-%DATE%.log",
       datePattern: "YYYY-MM-DD",

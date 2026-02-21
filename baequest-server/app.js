@@ -162,6 +162,8 @@ mongoose
     scheduleAutoCheckout();
   })
   .catch((err) => {
+    // console.error ensures the message is visible in docker logs even if Winston fails
+    console.error("FATAL: Failed to connect to MongoDB:", err.message);
     logger.error("Failed to connect to MongoDB", err);
     process.exit(1);
   });

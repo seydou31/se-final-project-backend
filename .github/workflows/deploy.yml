@@ -103,6 +103,11 @@ jobs:
           echo "$BACKEND_ENV" | ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
             -o ConnectTimeout=10 "$HOST" "cat > /home/badiakaseydou/.env"
 
+          # Print which env var keys are present (no values) to verify completeness
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            -o ConnectTimeout=10 "$HOST" \
+            "echo '=== .env keys on VM ===' && grep -v '^#' /home/badiakaseydou/.env | grep '=' | cut -d= -f1 | sort"
+
           # Write deploy script to a file.
           # Runner expands ${DOWNLOAD_URL}; \$ passes $ through to the remote shell.
           cat > /tmp/deploy.sh << DEPLOY_SCRIPT
@@ -154,6 +159,20 @@ jobs:
             --restart=unless-stopped \
             --env-file /home/badiakaseydou/.env \
             baequest-backend:latest || { echo "New container failed to start"; exit 1; }
+
+          # Early crash detection — if the container exits within 8 seconds it's a hard crash
+          sleep 8
+          CONTAINER_STATUS=\$(docker inspect "\$NEW_NAME" --format='{{.State.Status}}' 2>/dev/null || echo "missing")
+          if [ "\$CONTAINER_STATUS" != "running" ]; then
+            echo "=== EARLY CRASH DETECTED (status: \$CONTAINER_STATUS) ==="
+            echo "=== Container logs ==="
+            docker logs "\$NEW_NAME" --tail 60 2>&1 || true
+            echo "=== Container status ==="
+            docker inspect "\$NEW_NAME" --format='{{.State.Status}} (exit {{.State.ExitCode}})' 2>&1 || true
+            docker stop "\$NEW_NAME" 2>/dev/null || true
+            docker rm "\$NEW_NAME" 2>/dev/null || true
+            exit 1
+          fi
 
           # Health check new container before touching nginx
           echo "Health checking new container on port \$NEW_PORT..."
