@@ -120,10 +120,10 @@ const createProfileSchema = Joi.object({
     }),
   phoneNumber: Joi.string()
     .pattern(/^\+[1-9]\d{1,14}$/)
-    .optional()
-    .allow("")
+    .required()
     .messages({
       "string.pattern.base": "Phone number must be in E.164 format (e.g. +12025551234)",
+      "any.required": "Phone number is required",
     }),
 });
 
