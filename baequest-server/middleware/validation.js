@@ -118,6 +118,13 @@ const createProfileSchema = Joi.object({
       "string.unsafe": "Conversation starter contains invalid or unsafe characters",
       "any.required": "Conversation starter is required",
     }),
+  phoneNumber: Joi.string()
+    .pattern(/^\+[1-9]\d{1,14}$/)
+    .optional()
+    .allow("")
+    .messages({
+      "string.pattern.base": "Phone number must be in E.164 format (e.g. +12025551234)",
+    }),
 });
 
 const updateProfileSchema = Joi.object({
@@ -187,6 +194,13 @@ const updateProfileSchema = Joi.object({
       "string.min": "Conversation starter must be at least 10 characters long",
       "string.max": "Conversation starter must not exceed 160 characters",
       "string.unsafe": "Conversation starter contains invalid or unsafe characters",
+    }),
+  phoneNumber: Joi.string()
+    .pattern(/^\+[1-9]\d{1,14}$/)
+    .optional()
+    .allow("")
+    .messages({
+      "string.pattern.base": "Phone number must be in E.164 format (e.g. +12025551234)",
     }),
 });
 
