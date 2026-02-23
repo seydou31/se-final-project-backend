@@ -153,6 +153,10 @@ jobs:
           # Free the new port in case something grabbed it
           fuser -k "\${NEW_PORT}/tcp" 2>/dev/null || true
 
+          # Remove any leftover container with the new name (from a previously failed deploy)
+          docker stop "\$NEW_NAME" 2>/dev/null || true
+          docker rm "\$NEW_NAME" 2>/dev/null || true
+
           # Start new container on alternate port (old container still up and serving)
           docker run -d --name "\$NEW_NAME" \
             -p "\${NEW_PORT}:3001" \
