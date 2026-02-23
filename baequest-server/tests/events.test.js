@@ -30,6 +30,7 @@ let server;
 let io;
 
 beforeAll(async () => {
+  process.env.EVENT_CREATION_PASSPHRASE = 'test-passphrase';
   mongoServer = await MongoMemoryServer.create();
   await mongoose.connect(mongoServer.getUri());
   // Ensure 2dsphere index is ready before geo queries run
@@ -108,6 +109,7 @@ describe('POST /events — createEvent (public)', () => {
   it('should create an event when lat/lng are provided directly', async () => {
     const res = await request(app)
       .post('/events')
+      .set('x-event-passphrase', 'test-passphrase')
       .send({
         name: 'New Event',
         address: '1600 Pennsylvania Ave NW',
@@ -126,6 +128,7 @@ describe('POST /events — createEvent (public)', () => {
   it('should store optional fields when provided', async () => {
     const res = await request(app)
       .post('/events')
+      .set('x-event-passphrase', 'test-passphrase')
       .send({
         name: 'Full Event',
         address: '123 Main St',
@@ -148,6 +151,7 @@ describe('POST /events — createEvent (public)', () => {
   it('should return 400 when required fields are missing', async () => {
     const res = await request(app)
       .post('/events')
+      .set('x-event-passphrase', 'test-passphrase')
       .send({ name: 'Incomplete Event' }); // missing address, startTime, endTime
 
     expect(res.status).toBe(400);
@@ -156,6 +160,7 @@ describe('POST /events — createEvent (public)', () => {
   it('should return 400 when end time is before start time', async () => {
     const res = await request(app)
       .post('/events')
+      .set('x-event-passphrase', 'test-passphrase')
       .send({
         name: 'Bad Timing',
         address: '123 Main St',
