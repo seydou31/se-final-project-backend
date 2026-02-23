@@ -82,10 +82,11 @@ module.exports.createEvent = async (req, res, next) => {
       throw new BadRequestError("Name, address, start time, and end time are required");
     }
 
-    // If lat/lng not provided, get coordinates from address
+    // If lat/lng not provided, get coordinates from full address (include city/state/zip for accuracy)
     let coordinates = { lat, lng };
     if (!lat || !lng) {
-      coordinates = await getCoordinatesFromAddress(address);
+      const fullAddress = [address, city, state, zipcode].filter(Boolean).join(', ');
+      coordinates = await getCoordinatesFromAddress(fullAddress);
     }
 
     // Validate times
