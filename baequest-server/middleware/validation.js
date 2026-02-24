@@ -204,6 +204,38 @@ const updateProfileSchema = Joi.object({
     }),
 });
 
+// Event creation validation schema
+const createEventSchema = Joi.object({
+  name: Joi.string().min(2).max(100).custom(sanitizeString).required().messages({
+    "string.min": "Event name must be at least 2 characters",
+    "string.max": "Event name must not exceed 100 characters",
+    "string.unsafe": "Event name contains invalid characters",
+    "any.required": "Event name is required",
+  }),
+  address: Joi.string().min(2).max(200).custom(sanitizeString).required().messages({
+    "string.min": "Address must be at least 2 characters",
+    "string.max": "Address must not exceed 200 characters",
+    "any.required": "Address is required",
+  }),
+  city: Joi.string().max(100).custom(sanitizeString).optional().allow(""),
+  state: Joi.string().max(3).custom(sanitizeString).optional().allow(""),
+  zipcode: Joi.string().max(10).optional().allow(""),
+  lat: Joi.number().min(-90).max(90).optional(),
+  lng: Joi.number().min(-180).max(180).optional(),
+  startTime: Joi.string().isoDate().required().messages({
+    "string.isoDate": "Start time must be a valid ISO date",
+    "any.required": "Start time is required",
+  }),
+  endTime: Joi.string().isoDate().required().messages({
+    "string.isoDate": "End time must be a valid ISO date",
+    "any.required": "End time is required",
+  }),
+  description: Joi.string().max(1000).custom(sanitizeString).optional().allow(""),
+  link: Joi.string().uri().max(500).optional().allow("").messages({
+    "string.uri": "Link must be a valid URL",
+  }),
+});
+
 // Event validation schemas
 const checkinSchema = Joi.object({
   lat: Joi.number().min(-90).max(90).required().messages({
@@ -249,6 +281,7 @@ module.exports = {
   loginSchema,
   createProfileSchema,
   updateProfileSchema,
+  createEventSchema,
   checkinSchema,
   checkoutSchema,
 };

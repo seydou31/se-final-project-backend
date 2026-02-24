@@ -21,6 +21,7 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io");
 const mainRoute = require("./routes/index");
 const STATUS = require("./utils/errors");
@@ -29,9 +30,14 @@ const logger = require("./utils/logger");
 const requestLogger = require("./middleware/requestLogger");
 const profile = require("./models/profile");
 const CuratedEvent = require("./models/curatedEvent");
+const SECRET = require("./utils/config");
 
 const { PORT = 3001 } = process.env;
 
+const isProduction = process.env.NODE_ENV === 'production';
+const allowedOrigins = isProduction
+  ? ["https://baequests.com"]
+  : ["https://baequests.com", "http://localhost:3000", "http://localhost:5173"];
 
 const app = express();
 app.set('trust proxy', true);
@@ -39,10 +45,24 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: ["https://baequests.com", "http://localhost:3000", "http://localhost:5173"],
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
+});
+
+// Require valid JWT for all Socket.IO connections
+io.use((socket, next) => {
+  const cookieHeader = socket.handshake.headers.cookie || '';
+  const jwtMatch = cookieHeader.split(';').find(c => c.trim().startsWith('jwt='));
+  const token = jwtMatch ? jwtMatch.trim().slice(4) : null;
+  if (!token) return next(new Error('Authentication required'));
+  try {
+    socket.user = jwt.verify(token, SECRET.JWT_SECRET);
+    return next();
+  } catch {
+    return next(new Error('Invalid token'));
+  }
 });
 
 app.set("io", io);
@@ -69,7 +89,7 @@ io.on("connection", (socket) => {
 
 
 
-app.use(cors({ origin: ["https://baequests.com", "http://localhost:3000", "http://localhost:5173"], credentials: true }));
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(cookieParser());
 app.use(helmet());
 app.use(requestLogger);

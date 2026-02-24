@@ -18,4 +18,13 @@ const checkinLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-module.exports = { authLimiter, checkinLimiter };
+// Passphrase limiter — 5 event creation attempts per 15 minutes per IP
+const passphraseLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { message: 'Too many event creation attempts, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+module.exports = { authLimiter, checkinLimiter, passphraseLimiter };

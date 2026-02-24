@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const SECRET = require('../utils/config');
 
 // Allows event creation by either:
@@ -17,11 +18,16 @@ module.exports = (req, res, next) => {
     }
   }
 
-  // Try event manager passphrase
+  // Try event manager passphrase (timing-safe comparison to prevent timing attacks)
   const passphrase = req.headers['x-event-passphrase'];
   const expected = process.env.EVENT_CREATION_PASSPHRASE;
-  if (expected && passphrase === expected) {
-    return next();
+  if (expected && passphrase) {
+    const expectedBuf = Buffer.from(expected);
+    const passphraseBuf = Buffer.from(passphrase);
+    if (expectedBuf.length === passphraseBuf.length &&
+        crypto.timingSafeEqual(expectedBuf, passphraseBuf)) {
+      return next();
+    }
   }
 
   return res.status(401).json({ message: 'Valid login or event manager passphrase required' });

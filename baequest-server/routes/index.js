@@ -27,9 +27,9 @@ router.post('/refresh-token', refreshToken);
 router.post('/auth/google', authLimiter, googleAuth);
 router.post('/auth/google/token', authLimiter, googleAuthWithToken);
 router.post('/password-reset/request', authLimiter, requestPasswordReset);
-router.post('/password-reset/reset', resetPassword);
+router.post('/password-reset/reset', authLimiter, resetPassword);
 router.post('/email-verification/send', authLimiter, sendVerification);
-router.post('/email-verification/verify', verifyEmail);
+router.post('/email-verification/verify', authLimiter, verifyEmail);
 
 router.delete('/deleteUser', auth, deleteUser);
 

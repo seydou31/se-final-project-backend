@@ -23,6 +23,11 @@ function haversineKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Escape special regex characters to prevent injection
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Get coordinates from address using Google Places API (Find Place)
 const getCoordinatesFromAddress = async (address) => {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
@@ -142,8 +147,8 @@ module.exports.getEvents = async (req, res, next) => {
 
     const query = { endTime: { $gte: now } };
 
-    if (state) query.state = new RegExp(`^${state}$`, 'i');
-    if (city) query.city = new RegExp(`^${city}$`, 'i');
+    if (state) query.state = new RegExp(`^${escapeRegex(state)}$`, 'i');
+    if (city) query.city = new RegExp(`^${escapeRegex(city)}$`, 'i');
     if (zipcode) query.zipcode = zipcode;
     if (dateFrom) query.startTime = { ...query.startTime, $gte: new Date(dateFrom) };
     if (dateTo) query.startTime = { ...query.startTime, $lte: new Date(dateTo) };
@@ -314,7 +319,7 @@ module.exports.checkinAtEvent = async (req, res, next) => {
     const allCheckedIn = await profile.find({
       owner: { $in: event.checkedInUsers, $ne: userId },
       ...genderFilter,
-    }).select("name age gender profession bio interests convoStarter profilePicture sexualOrientation owner");
+    }).select("name age gender profession bio interests convoStarter profilePicture sexualOrientation");
 
     const compatibleUsers = allCheckedIn.filter(u => {
       if (sexualOrientation === 'bisexual') return true;
@@ -417,7 +422,7 @@ module.exports.getUsersAtEvent = async (req, res, next) => {
     const allCheckedIn = await profile.find({
       owner: { $in: event.checkedInUsers, $ne: userId },
       ...genderFilter,
-    }).select("name age gender profession bio interests convoStarter profilePicture sexualOrientation owner");
+    }).select("name age gender profession bio interests convoStarter profilePicture sexualOrientation");
 
     const compatibleUsers = allCheckedIn.filter(u => {
       if (sexualOrientation === 'bisexual') return true;
