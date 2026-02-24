@@ -1,9 +1,12 @@
 const rateLimit = require('express-rate-limit');
 
+const skipInTest = () => process.env.NODE_ENV === 'test';
+
 // Strict limiter for auth endpoints — 20 requests per 15 minutes per IP
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
+  skip: skipInTest,
   message: { message: 'Too many attempts, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -13,6 +16,7 @@ const authLimiter = rateLimit({
 const checkinLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
+  skip: skipInTest,
   message: { message: 'Check-in rate limit exceeded, please wait before trying again.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -22,6 +26,7 @@ const checkinLimiter = rateLimit({
 const passphraseLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  skip: skipInTest,
   message: { message: 'Too many event creation attempts, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,

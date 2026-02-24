@@ -69,7 +69,7 @@ async function createUserAndToken(email = 'test@example.com') {
     email,
     password: await bcrypt.hash('TestPass1!', 10),
   });
-  const token = jwt.sign({ _id: userDoc._id }, SECRET.JWT_SECRET);
+  const token = jwt.sign({ _id: userDoc._id, tokenVersion: userDoc.tokenVersion }, SECRET.JWT_SECRET);
   return { user: userDoc, token };
 }
 
@@ -566,8 +566,8 @@ describe('GET /events/:id/users — getUsersAtEvent', () => {
       .set('Cookie', [`jwt=${token}`]);
 
     expect(res.status).toBe(200);
-    const returnedIds = res.body.map(u => u.owner?.toString());
-    expect(returnedIds).not.toContain(userId.toString());
+    // Requesting user is the only one checked in but is excluded by the DB query
+    expect(res.body).toHaveLength(0);
   });
 
   it('should return 404 for a non-existent event', async () => {

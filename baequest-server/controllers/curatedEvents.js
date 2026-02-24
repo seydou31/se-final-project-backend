@@ -319,7 +319,7 @@ module.exports.checkinAtEvent = async (req, res, next) => {
     const allCheckedIn = await profile.find({
       owner: { $in: event.checkedInUsers, $ne: userId },
       ...genderFilter,
-    }).select("name age gender profession bio interests convoStarter profilePicture sexualOrientation");
+    }).select("name age gender profession bio interests convoStarter profilePicture sexualOrientation owner");
 
     const compatibleUsers = allCheckedIn.filter(u => {
       if (sexualOrientation === 'bisexual') return true;
@@ -422,7 +422,7 @@ module.exports.getUsersAtEvent = async (req, res, next) => {
     const allCheckedIn = await profile.find({
       owner: { $in: event.checkedInUsers, $ne: userId },
       ...genderFilter,
-    }).select("name age gender profession bio interests convoStarter profilePicture sexualOrientation");
+    }).select("name age gender profession bio interests convoStarter profilePicture sexualOrientation owner");
 
     const compatibleUsers = allCheckedIn.filter(u => {
       if (sexualOrientation === 'bisexual') return true;

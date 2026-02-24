@@ -84,7 +84,7 @@ describe('POST /refresh - refreshToken', () => {
       email: 'refresh@example.com',
       password: await bcrypt.hash('pass', 10),
     });
-    const token = jwt.sign({ _id: u._id }, SECRET.JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ _id: u._id, tokenVersion: u.tokenVersion }, SECRET.JWT_SECRET, { expiresIn: '7d' });
 
     const res = await request(app)
       .post('/refresh')

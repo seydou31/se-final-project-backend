@@ -175,7 +175,7 @@ describe('Authentication Endpoints', () => {
       expect(jwtCookie).toBeDefined();
       expect(jwtCookie).toMatch(/HttpOnly/);
       expect(jwtCookie).toMatch(/Secure/);
-      expect(jwtCookie).toMatch(/SameSite=None/);
+      expect(jwtCookie).toMatch(/SameSite=Lax/);
     });
 
     it('should create valid JWT token', async () => {
@@ -221,7 +221,7 @@ describe('Authentication Endpoints', () => {
         password: await bcrypt.hash('password123', 10),
       });
       userId = user._id;
-      token = jwt.sign({ _id: userId }, SECRET.JWT_SECRET);
+      token = jwt.sign({ _id: userId, tokenVersion: user.tokenVersion }, SECRET.JWT_SECRET);
     });
 
     it('should delete authenticated user', async () => {

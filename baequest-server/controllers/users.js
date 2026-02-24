@@ -50,7 +50,7 @@ module.exports.createUser = async (req, res, next) => {
     });
 
     // Auto-login: generate JWT and set cookie
-    const token = jwt.sign({ _id: newUser._id }, SECRET.JWT_SECRET, {
+    const token = jwt.sign({ _id: newUser._id, tokenVersion: 0 }, SECRET.JWT_SECRET, {
       expiresIn: "7d",
     });
 
@@ -62,7 +62,7 @@ module.exports.createUser = async (req, res, next) => {
         maxAge: 3600000 * 24 * 7,
         httpOnly: true,
         secure: true,
-        sameSite: "None",
+        sameSite: "Lax",
       })
       .json({
         ...userObject,
@@ -79,7 +79,7 @@ module.exports.login = async (req, res, next) => {
 
   try {
     const foundUser = await user.findUserByCredentials(email, password);
-    const token = jwt.sign({ _id: foundUser._id }, SECRET.JWT_SECRET, {
+    const token = jwt.sign({ _id: foundUser._id, tokenVersion: foundUser.tokenVersion }, SECRET.JWT_SECRET, {
       expiresIn: "7d",
     });
     res
@@ -87,7 +87,7 @@ module.exports.login = async (req, res, next) => {
         maxAge: 3600000 * 24 * 7,
         httpOnly: true,
         secure: true,
-        sameSite: "None",
+        sameSite: "Lax",
       })
       .json({
         message: "Login successful",
@@ -101,11 +101,23 @@ module.exports.login = async (req, res, next) => {
   }
 };
 
-module.exports.logout = (req, res) => {
+module.exports.logout = async (req, res) => {
+  const token = req.cookies.jwt;
+
+  if (token) {
+    try {
+      const payload = jwt.verify(token, SECRET.JWT_SECRET);
+      // Invalidate all existing sessions by bumping the token version
+      await user.findByIdAndUpdate(payload._id, { $inc: { tokenVersion: 1 } });
+    } catch {
+      // Token already expired or invalid — just clear the cookie
+    }
+  }
+
   res.clearCookie("jwt", {
     httpOnly: true,
     secure: true,
-    sameSite: "None",
+    sameSite: "Lax",
   });
 
   return res.status(200).json({ message: "Logout successful" });
@@ -128,8 +140,13 @@ module.exports.refreshToken = async (req, res, next) => {
       return next(new UnauthorizedError("User not found"));
     }
 
+    // Reject if token version no longer matches (user logged out from another session)
+    if (payload.tokenVersion !== foundUser.tokenVersion) {
+      return next(new UnauthorizedError("Session is no longer valid. Please log in again."));
+    }
+
     // Generate new token with fresh expiration
-    const newToken = jwt.sign({ _id: foundUser._id }, SECRET.JWT_SECRET, {
+    const newToken = jwt.sign({ _id: foundUser._id, tokenVersion: foundUser.tokenVersion }, SECRET.JWT_SECRET, {
       expiresIn: "7d",
     });
 
@@ -138,7 +155,7 @@ module.exports.refreshToken = async (req, res, next) => {
         maxAge: 3600000 * 24 * 7,
         httpOnly: true,
         secure: true,
-        sameSite: "None",
+        sameSite: "Lax",
       })
       .json({
         message: "Token refreshed successfully",
@@ -259,7 +276,7 @@ module.exports.googleAuth = async (req, res, next) => {
     }
 
     // Create JWT token
-    const token = jwt.sign({ _id: foundUser._id }, SECRET.JWT_SECRET, {
+    const token = jwt.sign({ _id: foundUser._id, tokenVersion: foundUser.tokenVersion }, SECRET.JWT_SECRET, {
       expiresIn: "7d",
     });
 
@@ -275,7 +292,7 @@ module.exports.googleAuth = async (req, res, next) => {
         maxAge: 3600000 * 24 * 7,
         httpOnly: true,
         secure: true,
-        sameSite: "None",
+        sameSite: "Lax",
       })
       .json({
         message: "Google authentication successful",
@@ -294,6 +311,13 @@ module.exports.googleAuthWithToken = async (req, res, next) => {
   const { accessToken } = req.body;
 
   try {
+    // Verify the access token was issued specifically for this application
+    const tokenInfoResponse = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${accessToken}`);
+    const tokenInfo = await tokenInfoResponse.json();
+    if (!tokenInfoResponse.ok || tokenInfo.issued_to !== process.env.GOOGLE_CLIENT_ID) {
+      throw new Error('Access token was not issued for this application');
+    }
+
     // Fetch user info from Google using access token
     const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: {
@@ -333,7 +357,7 @@ module.exports.googleAuthWithToken = async (req, res, next) => {
     }
 
     // Create JWT token
-    const token = jwt.sign({ _id: foundUser._id }, SECRET.JWT_SECRET, {
+    const token = jwt.sign({ _id: foundUser._id, tokenVersion: foundUser.tokenVersion }, SECRET.JWT_SECRET, {
       expiresIn: "7d",
     });
 
@@ -349,7 +373,7 @@ module.exports.googleAuthWithToken = async (req, res, next) => {
         maxAge: 3600000 * 24 * 7,
         httpOnly: true,
         secure: true,
-        sameSite: "None",
+        sameSite: "Lax",
       })
       .json({
         message: "Google authentication successful",

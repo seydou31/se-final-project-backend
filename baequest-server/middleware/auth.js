@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/user');
 const SECRET = require('../utils/config');
 const logger = require('../utils/logger');
 
@@ -11,7 +12,7 @@ const handleAuthError = (res, message = 'Authorization Error', tokenExpired = fa
     });
 };
 
-module.exports = (req, res, next) => {
+module.exports = async (req, res, next) => {
   const token = req.cookies.jwt;
 
   if (!token) {
@@ -32,6 +33,12 @@ module.exports = (req, res, next) => {
 
     // Invalid token (malformed, wrong signature, etc.)
     return handleAuthError(res, 'Invalid authentication token', false);
+  }
+
+  // Validate token version so that logout invalidates existing tokens
+  const foundUser = await User.findById(payload._id).select('tokenVersion');
+  if (!foundUser || foundUser.tokenVersion !== payload.tokenVersion) {
+    return handleAuthError(res, 'Session is no longer valid. Please log in again.');
   }
 
   req.user = payload;

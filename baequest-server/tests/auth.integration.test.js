@@ -207,7 +207,7 @@ describe('Complete Authentication Flow Integration Tests', () => {
         .send({ email: userData.email });
 
       expect(response.status).toBe(200);
-      expect(response.body.message).toContain('Verification email sent');
+      expect(response.body.message).toContain('If this email is registered');
       expect(sendVerificationEmail).toHaveBeenCalledTimes(1);
 
       // Old token should be deleted, new one created
@@ -227,8 +227,9 @@ describe('Complete Authentication Flow Integration Tests', () => {
         .post('/email-verification/send')
         .send({ email: user.email });
 
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Email is already verified');
+      // Returns 200 to avoid revealing whether the account exists or is already verified
+      expect(response.status).toBe(200);
+      expect(response.body.message).toContain('If this email is registered');
     });
   });
 

@@ -41,6 +41,10 @@ const user = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  tokenVersion: {
+    type: Number,
+    default: 0,
+  },
 });
 
 user.statics.findUserByCredentials = function findUserByCredentials(email, password) {

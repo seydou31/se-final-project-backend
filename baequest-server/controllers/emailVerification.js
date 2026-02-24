@@ -9,16 +9,13 @@ const sendVerification = async (req, res) => {
   try {
     const { email } = req.body;
 
-    // Find user by email
+    // Find user by email — always return 200 to prevent account enumeration
     const user = await User.findOne({ email });
 
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Check if already verified
-    if (user.isEmailVerified) {
-      return res.status(400).json({ error: 'Email is already verified' });
+    if (!user || user.isEmailVerified) {
+      return res.status(200).json({
+        message: 'If this email is registered and unverified, a verification link has been sent.'
+      });
     }
 
     // Generate secure random token
@@ -46,7 +43,7 @@ const sendVerification = async (req, res) => {
     await sendVerificationEmail(email, verificationUrl);
 
     return res.status(200).json({
-      message: 'Verification email sent successfully. Please check your inbox.'
+      message: 'If this email is registered and unverified, a verification link has been sent.'
     });
   } catch (error) {
     logger.error('Send verification error:', error);

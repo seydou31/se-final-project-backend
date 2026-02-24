@@ -57,7 +57,7 @@ describe('Profile Endpoints', () => {
       password: await bcrypt.hash('password123', 10),
     });
     userId = user._id;
-    token = jwt.sign({ _id: userId }, SECRET.JWT_SECRET);
+    token = jwt.sign({ _id: userId, tokenVersion: user.tokenVersion }, SECRET.JWT_SECRET);
   });
 
   describe('POST /users/profile', () => {

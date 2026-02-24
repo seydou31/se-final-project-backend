@@ -58,6 +58,7 @@ io.use((socket, next) => {
   const token = jwtMatch ? jwtMatch.trim().slice(4) : null;
   if (!token) return next(new Error('Authentication required'));
   try {
+    // eslint-disable-next-line no-param-reassign
     socket.user = jwt.verify(token, SECRET.JWT_SECRET);
     return next();
   } catch {
@@ -96,7 +97,7 @@ app.use(requestLogger);
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500, // Increased for development; adjust for production
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   // Trust proxy is enabled via app.set('trust proxy', true)
@@ -106,8 +107,17 @@ app.use(limiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files for uploaded images
-app.use('/uploads', express.static('uploads'));
+// Serve uploaded images only to authenticated users
+app.use('/uploads', (req, res, next) => {
+  const token = req.cookies.jwt;
+  if (!token) return res.status(401).json({ message: 'Not authorized' });
+  try {
+    jwt.verify(token, SECRET.JWT_SECRET);
+    return next();
+  } catch {
+    return res.status(401).json({ message: 'Not authorized' });
+  }
+}, express.static('uploads'));
 
 app.use("/", mainRoute);
 
