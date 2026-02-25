@@ -90,9 +90,9 @@ io.on("connection", (socket) => {
 
 
 
+app.use(helmet());
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(cookieParser());
-app.use(helmet());
 app.use(requestLogger);
 
 const limiter = rateLimit({
