@@ -21,6 +21,12 @@ const sendCheckinNotification = async (toPhone, checkedInName, eventName) => {
   await sns.send(new PublishCommand({
     Message: `${checkedInName} just checked in at ${eventName} on BaeQuest! Open the app to connect.`,
     PhoneNumber: toPhone,
+    MessageAttributes: {
+      'AWS.MM.SMS.OriginationNumber': {
+        DataType: 'String',
+        StringValue: process.env.SMS_ORIGINATION_NUMBER || '+18555329045',
+      },
+    },
   }));
 };
 
