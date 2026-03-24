@@ -127,6 +127,7 @@ module.exports.createEvent = async (req, res, next) => {
       },
       startTime: start,
       endTime: end,
+      ...(req.user?._id && { createdBy: req.user._id }),
     });
 
     res.status(201).json({
@@ -345,11 +346,7 @@ module.exports.checkoutFromEvent = async (req, res, next) => {
     const event = await CuratedEvent.findById(id);
     if (!event) throw new NotFoundError("Event not found");
 
-    // Remove user from checkedInUsers
-    event.checkedInUsers.pull(userId);
-    await event.save();
-
-    // Clear profile location
+    // Only clear profile location — checkedInUsers is kept for revenue tracking
     await profile.findOneAndUpdate(
       { owner: userId },
       { $unset: { "location.eventId": "", "location.lat": "", "location.lng": "" }, $set: { "location.updatedAt": new Date() } }
@@ -481,5 +478,26 @@ module.exports.getNearbyEvents = async (req, res, next) => {
     res.json(formattedEvents);
   } catch (err) {
     next(err);
+  }
+};
+
+// Heartbeat — keeps user marked as present at an event
+module.exports.heartbeat = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id;
+
+    const updated = await profile.findOneAndUpdate(
+      { owner: userId, 'location.eventId': id },
+      { $set: { 'location.updatedAt': new Date() } }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: 'Not checked in to this event' });
+    }
+
+    return res.status(200).json({ message: 'ok' });
+  } catch (err) {
+    return next(err);
   }
 };

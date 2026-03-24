@@ -45,6 +45,23 @@ const user = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  name: {
+    type: String,
+    default: null,
+  },
+  role: {
+    type: String,
+    enum: ['user', 'eventManager'],
+    default: 'user',
+  },
+  stripeAccountId: {
+    type: String,
+    default: null,
+  },
+  stripeOnboardingComplete: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 user.statics.findUserByCredentials = function findUserByCredentials(email, password) {

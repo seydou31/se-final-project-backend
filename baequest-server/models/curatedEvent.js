@@ -63,6 +63,11 @@ const curatedEventSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'user',
   }],
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'user',
+    default: null,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

@@ -43,4 +43,9 @@ const eventFeedbackRouter = require('./eventFeedback');
 
 router.use('/events', eventFeedbackRouter);
 
+// Event manager routes
+const eventManagerRouter = require('./eventManagers');
+
+router.use('/event-managers', eventManagerRouter);
+
 module.exports = router;

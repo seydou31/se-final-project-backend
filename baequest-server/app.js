@@ -160,17 +160,12 @@ function scheduleAutoCheckout() {
 
   setTimeout(async () => {
     try {
-      // Clear event check-ins from profiles
+      // Clear presence from profiles only — checkedInUsers kept for revenue
       const profileResult = await profile.updateMany(
         { "location.eventId": { $exists: true, $ne: null } },
         { $unset: { "location.eventId": "", "location.lat": "", "location.lng": "" }, $set: { "location.updatedAt": new Date() } }
       );
-      // Clear checkedInUsers arrays on all events
-      const eventResult = await CuratedEvent.updateMany(
-        { checkedInUsers: { $exists: true, $not: { $size: 0 } } },
-        { $set: { checkedInUsers: [] } }
-      );
-      logger.info(`Auto-checkout at 2am: ${profileResult.modifiedCount} users checked out, ${eventResult.modifiedCount} events cleared`);
+      logger.info(`Auto-checkout at 2am: ${profileResult.modifiedCount} users cleared from active event presence`);
     } catch (err) {
       logger.error("Auto-checkout failed:", err);
     }
