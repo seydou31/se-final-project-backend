@@ -20,7 +20,12 @@ const COOKIE_OPTIONS = {
 };
 
 module.exports.register = async (req, res, next) => {
-  const { email, password, name } = req.body;
+  const { email, password, name, inviteCode } = req.body;
+
+  if (!process.env.EVENT_MANAGER_INVITE_CODE || inviteCode !== process.env.EVENT_MANAGER_INVITE_CODE) {
+    return res.status(403).json({ message: 'Invalid invite code' });
+  }
+
   try {
     const hash = await bcrypt.hash(password, 10);
     await User.create({ email, password: hash, name, role: 'eventManager', isEmailVerified: true });
