@@ -73,6 +73,17 @@ async function createUserAndToken(email = 'test@example.com') {
   return { user: userDoc, token };
 }
 
+async function createEventManagerAndToken(email = 'manager@example.com') {
+  const userDoc = await User.create({
+    email,
+    password: await bcrypt.hash('TestPass1!', 10),
+    role: 'eventManager',
+    isEmailVerified: true,
+  });
+  const token = jwt.sign({ _id: userDoc._id, tokenVersion: userDoc.tokenVersion }, SECRET.JWT_SECRET);
+  return { user: userDoc, token };
+}
+
 async function createTestEvent(overrides = {}) {
   return CuratedEvent.create({
     name: 'Test Event',
@@ -103,13 +114,14 @@ async function createTestProfile(userId, overrides = {}) {
   });
 }
 
-// ─── POST /events — createEvent (public) ─────────────────────────────────────
+// ─── POST /events — createEvent (event manager auth required) ────────────────
 
-describe('POST /events — createEvent (public)', () => {
+describe('POST /events — createEvent (event manager auth required)', () => {
   it('should create an event when lat/lng are provided directly', async () => {
+    const { token } = await createEventManagerAndToken();
     const res = await request(app)
       .post('/events')
-      .set('x-event-passphrase', 'test-passphrase')
+      .set('Cookie', `jwt=${token}`)
       .send({
         name: 'New Event',
         address: '1600 Pennsylvania Ave NW',
@@ -126,9 +138,10 @@ describe('POST /events — createEvent (public)', () => {
   });
 
   it('should store optional fields when provided', async () => {
+    const { token } = await createEventManagerAndToken();
     const res = await request(app)
       .post('/events')
-      .set('x-event-passphrase', 'test-passphrase')
+      .set('Cookie', `jwt=${token}`)
       .send({
         name: 'Full Event',
         address: '123 Main St',
@@ -149,18 +162,20 @@ describe('POST /events — createEvent (public)', () => {
   });
 
   it('should return 400 when required fields are missing', async () => {
+    const { token } = await createEventManagerAndToken();
     const res = await request(app)
       .post('/events')
-      .set('x-event-passphrase', 'test-passphrase')
+      .set('Cookie', `jwt=${token}`)
       .send({ name: 'Incomplete Event' }); // missing address, startTime, endTime
 
     expect(res.status).toBe(400);
   });
 
   it('should return 400 when end time is before start time', async () => {
+    const { token } = await createEventManagerAndToken();
     const res = await request(app)
       .post('/events')
-      .set('x-event-passphrase', 'test-passphrase')
+      .set('Cookie', `jwt=${token}`)
       .send({
         name: 'Bad Timing',
         address: '123 Main St',
@@ -477,13 +492,13 @@ describe('POST /events/:id/checkout — checkoutFromEvent', () => {
     expect(res.body.message).toBe('Checked out successfully');
   });
 
-  it('should remove the user from checkedInUsers', async () => {
+  it('should keep the user in checkedInUsers for revenue tracking after checkout', async () => {
     await request(app)
       .post(`/events/${testEvent._id}/checkout`)
       .set('Cookie', [`jwt=${token}`]);
 
     const updated = await CuratedEvent.findById(testEvent._id);
-    expect(updated.checkedInUsers.map(id => id.toString())).not.toContain(userId.toString());
+    expect(updated.checkedInUsers.map(id => id.toString())).toContain(userId.toString());
   });
 
   it('should return 404 for a non-existent event', async () => {

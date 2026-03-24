@@ -29,7 +29,6 @@ const errorHandler = require("./middleware/errorHandler");
 const logger = require("./utils/logger");
 const requestLogger = require("./middleware/requestLogger");
 const profile = require("./models/profile");
-const CuratedEvent = require("./models/curatedEvent");
 const SECRET = require("./utils/config");
 
 const { PORT = 3001 } = process.env;

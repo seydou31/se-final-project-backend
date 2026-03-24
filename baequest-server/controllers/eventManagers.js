@@ -1,11 +1,10 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const getStripe = () => require('stripe')(process.env.STRIPE_SECRET_KEY);
 const User = require('../models/user');
 const CuratedEvent = require('../models/curatedEvent');
 const SECRET = require('../utils/config');
 const logger = require('../utils/logger');
-
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // Ticket price in dollars (env var is in cents, e.g. TICKET_PRICE=500 → $5.00)
 const ticketPriceDollars = () => parseInt(process.env.TICKET_PRICE || '500', 10) / 100;
@@ -114,14 +113,14 @@ module.exports.getStripeOnboardingLink = async (req, res, next) => {
 
     let accountId = user.stripeAccountId;
     if (!accountId) {
-      const account = await stripe.accounts.create({ type: 'express' });
+      const account = await getStripe().accounts.create({ type: 'express' });
       accountId = account.id;
       user.stripeAccountId = accountId;
       await user.save();
     }
 
     const origin = process.env.FRONTEND_URL || 'https://baequests.com';
-    const accountLink = await stripe.accountLinks.create({
+    const accountLink = await getStripe().accountLinks.create({
       account: accountId,
       refresh_url: `${origin}/event-manager/onboarding?refresh=true`,
       return_url: `${origin}/event-manager/onboarding?success=true`,
@@ -142,7 +141,7 @@ module.exports.verifyStripeOnboarding = async (req, res, next) => {
       return res.status(400).json({ message: 'No Stripe account found' });
     }
 
-    const account = await stripe.accounts.retrieve(user.stripeAccountId);
+    const account = await getStripe().accounts.retrieve(user.stripeAccountId);
     user.stripeOnboardingComplete = account.details_submitted;
     await user.save();
 
