@@ -1,10 +1,12 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const getStripe = () => require('stripe')(process.env.STRIPE_SECRET_KEY);
+const Stripe = require('stripe');
 const User = require('../models/user');
 const CuratedEvent = require('../models/curatedEvent');
 const SECRET = require('../utils/config');
 const logger = require('../utils/logger');
+
+const getStripe = () => Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Ticket price in dollars (env var is in cents, e.g. TICKET_PRICE=500 → $5.00)
 const ticketPriceDollars = () => parseInt(process.env.TICKET_PRICE || '500', 10) / 100;
