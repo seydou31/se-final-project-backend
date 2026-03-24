@@ -25,14 +25,12 @@ module.exports.createUser = async (req, res, next) => {
     const hash = await bcrypt.hash(password, 10);
     const newUser = await user.create({ email, password: hash, isEmailVerified: false });
 
-    // Generate verification token
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const hashedToken = crypto
       .createHash('sha256')
       .update(verificationToken)
       .digest('hex');
 
-    // Create verification document with 24-hour expiration
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await EmailVerification.create({
       userId: newUser._id,
@@ -40,7 +38,6 @@ module.exports.createUser = async (req, res, next) => {
       expiresAt,
     });
 
-    // Send verification and welcome emails asynchronously (don't block response)
     const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
     sendVerificationEmail(email, verificationUrl).catch(err => {
       logger.error('Failed to send verification email:', err);

@@ -1,10 +1,13 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const Stripe = require('stripe');
 const User = require('../models/user');
 const CuratedEvent = require('../models/curatedEvent');
+const EmailVerification = require('../models/emailVerification');
 const SECRET = require('../utils/config');
 const logger = require('../utils/logger');
+const { sendVerificationEmail } = require('../utils/email');
 
 const getStripe = () => Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -28,8 +31,22 @@ module.exports.register = async (req, res, next) => {
 
   try {
     const hash = await bcrypt.hash(password, 10);
-    await User.create({ email, password: hash, name, role: 'eventManager', isEmailVerified: true });
-    return res.status(201).json({ message: 'Event manager account created' });
+    const newUser = await User.create({ email, password: hash, name, role: 'eventManager', isEmailVerified: false });
+
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
+    await EmailVerification.create({
+      userId: newUser._id,
+      token: hashedToken,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
+    sendVerificationEmail(email, verificationUrl).catch((err) => {
+      logger.error('Failed to send event manager verification email:', err);
+    });
+
+    return res.status(201).json({ message: 'Account created. Please check your email to verify your account.' });
   } catch (err) {
     if (err.code === 11000) {
       return res.status(409).json({ message: 'An account with this email already exists' });
@@ -48,6 +65,9 @@ module.exports.login = async (req, res, next) => {
     const matched = await bcrypt.compare(password, user.password);
     if (!matched) {
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+    if (!user.isEmailVerified) {
+      return res.status(403).json({ message: 'Please verify your email before logging in' });
     }
 
     const token = jwt.sign(
