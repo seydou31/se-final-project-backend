@@ -251,21 +251,24 @@ module.exports.checkinAtEvent = async (req, res, next) => {
     const now = new Date();
     if (now > event.endTime) throw new BadRequestError("This event has already ended");
 
+    // Validate event has stored coordinates
+    const coords = event.location?.coordinates;
+    if (!coords || coords.length < 2 || typeof coords[0] !== 'number' || typeof coords[1] !== 'number') {
+      throw new BadRequestError('Event location coordinates are not set correctly');
+    }
+
     // Validate user is within 1 mile (1.60934 km)
-    const eventLat = event.location.coordinates[1];
-    const eventLng = event.location.coordinates[0];
+    const eventLat = coords[1];
+    const eventLng = coords[0];
     const distanceKm = haversineKm(parseFloat(lat), parseFloat(lng), eventLat, eventLng);
 
-    if (distanceKm > 1.60934) {
+    if (Number.isNaN(distanceKm) || distanceKm > 1.60934) {
       const distanceMiles = (distanceKm * 0.621371).toFixed(1);
       throw new BadRequestError(`You must be within 1 mile of the event to check in. You are ${distanceMiles} miles away.`);
     }
 
-    // Add user to checkedInUsers if not already there
-    if (!event.checkedInUsers.some(uid => uid.toString() === userId.toString())) {
-      event.checkedInUsers.push(userId);
-      await event.save();
-    }
+    // Atomically add user to checkedInUsers (prevents race condition duplicates)
+    await CuratedEvent.findByIdAndUpdate(id, { $addToSet: { checkedInUsers: userId } });
 
     // Update profile location and capture the result (avoids a second DB fetch)
     const currentUserProfile = await profile.findOneAndUpdate(
@@ -314,7 +317,7 @@ module.exports.checkinAtEvent = async (req, res, next) => {
       } catch (err) {
         logger.error('Failed to send SMS check-in notifications:', err);
       }
-    })();
+    })().catch(err => logger.error('Unhandled SMS IIFE rejection:', err));
 
     // Return compatible users at this event
     const allCheckedIn = await profile.find({
@@ -386,7 +389,7 @@ module.exports.checkoutFromEvent = async (req, res, next) => {
       } catch (err) {
         logger.error('Failed to create event feedback request:', err);
       }
-    })();
+    })().catch(err => logger.error('Unhandled feedback IIFE rejection:', err));
 
     logger.info(`User ${userId} checked out from event ${id}`);
     res.status(200).json({ message: "Checked out successfully" });

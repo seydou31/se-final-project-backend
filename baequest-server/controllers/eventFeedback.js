@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const EventFeedback = require('../models/eventFeedback');
-const Event = require('../models/event');
+const CuratedEvent = require('../models/curatedEvent');
 const User = require('../models/user');
 const { sendFeedbackRequestEmail } = require('../utils/email');
 const { BadRequestError, NotFoundError } = require('../utils/customErrors');
@@ -15,7 +15,7 @@ module.exports.createFeedbackRequest = async (req, res, next) => {
     const userId = req.user._id;
 
     // Check if event exists
-    const event = await Event.findById(eventId);
+    const event = await CuratedEvent.findById(eventId);
     if (!event) {
       throw new NotFoundError('Event not found');
     }
@@ -50,14 +50,14 @@ module.exports.createFeedbackRequest = async (req, res, next) => {
 
     // Format event details for email
     const eventDetails = {
-      name: event.title,
-      date: new Date(event.date).toLocaleDateString('en-US', {
+      name: event.name,
+      date: new Date(event.startTime).toLocaleDateString('en-US', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       }),
-      location: event.location?.address || event.location?.name || 'Location TBD',
+      location: event.address || 'Location TBD',
     };
 
     // Send feedback email
@@ -85,7 +85,7 @@ module.exports.getFeedbackRequest = async (req, res, next) => {
     const { token } = req.params;
 
     const feedbackRequest = await EventFeedback.findOne({ token })
-      .populate('eventId', 'title date location city state')
+      .populate('eventId', 'name startTime address city state')
       .populate('userId', 'email');
 
     if (!feedbackRequest) {
@@ -121,9 +121,9 @@ module.exports.getFeedbackRequest = async (req, res, next) => {
     // Event-based feedback
     return res.status(200).json({
       eventId: feedbackRequest.eventId._id,
-      eventName: feedbackRequest.eventId.title,
-      eventDate: feedbackRequest.eventId.date,
-      eventLocation: feedbackRequest.eventId.location?.address || feedbackRequest.eventId.location?.name || 'Location TBD',
+      eventName: feedbackRequest.eventId.name,
+      eventDate: feedbackRequest.eventId.startTime,
+      eventLocation: feedbackRequest.eventId.address || 'Location TBD',
       city: feedbackRequest.eventId.city,
       state: feedbackRequest.eventId.state,
     });

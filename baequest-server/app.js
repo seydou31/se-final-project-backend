@@ -31,6 +31,13 @@ const requestLogger = require("./middleware/requestLogger");
 const profile = require("./models/profile");
 const SECRET = require("./utils/config");
 
+const REQUIRED_ENV_VARS = ['JWT_SECRET', 'MONGODB_URI'];
+const missingVars = REQUIRED_ENV_VARS.filter(v => !process.env[v]);
+if (missingVars.length > 0) {
+  console.error(`FATAL: Missing required environment variables: ${missingVars.join(', ')}`);
+  process.exit(1);
+}
+
 const { PORT = 3001 } = process.env;
 
 const isProduction = process.env.NODE_ENV === 'production';

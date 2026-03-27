@@ -25,6 +25,18 @@ const COOKIE_OPTIONS = {
 module.exports.register = async (req, res, next) => {
   const { email, password, name, inviteCode } = req.body;
 
+  if (!email || !password || !name) {
+    return res.status(400).json({ message: 'Email, password, and name are required' });
+  }
+
+  if (typeof password !== 'string' || password.length < 8) {
+    return res.status(400).json({ message: 'Password must be at least 8 characters' });
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ message: 'Invalid email format' });
+  }
+
   if (!process.env.EVENT_MANAGER_INVITE_CODE || inviteCode !== process.env.EVENT_MANAGER_INVITE_CODE) {
     return res.status(403).json({ message: 'Invalid invite code' });
   }
