@@ -540,9 +540,8 @@ describe('GET /events/:id/users — getUsersAtEvent', () => {
       name: 'Jane',
       gender: 'female',
       sexualOrientation: 'straight',
+      location: { eventId: testEvent._id, lat: NEARBY_LAT, lng: NEARBY_LNG, updatedAt: new Date() },
     });
-    testEvent.checkedInUsers.push(otherUser._id);
-    await testEvent.save();
 
     const res = await request(app)
       .get(`/events/${testEvent._id}/users`)
@@ -560,9 +559,8 @@ describe('GET /events/:id/users — getUsersAtEvent', () => {
       name: 'Bob',
       gender: 'male',
       sexualOrientation: 'straight',
+      location: { eventId: testEvent._id, lat: NEARBY_LAT, lng: NEARBY_LNG, updatedAt: new Date() },
     });
-    testEvent.checkedInUsers.push(otherUser._id);
-    await testEvent.save();
 
     const res = await request(app)
       .get(`/events/${testEvent._id}/users`)
@@ -573,8 +571,11 @@ describe('GET /events/:id/users — getUsersAtEvent', () => {
   });
 
   it('should not return the requesting user themselves', async () => {
-    testEvent.checkedInUsers.push(userId);
-    await testEvent.save();
+    // Give the requesting user a presence location so the query has something to exclude
+    await Profile.findOneAndUpdate(
+      { owner: userId },
+      { location: { eventId: testEvent._id, lat: NEARBY_LAT, lng: NEARBY_LNG, updatedAt: new Date() } }
+    );
 
     const res = await request(app)
       .get(`/events/${testEvent._id}/users`)

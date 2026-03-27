@@ -296,7 +296,8 @@ module.exports.checkinAtEvent = async (req, res, next) => {
     (async () => {
       try {
         const targets = await profile.find({
-          owner: { $in: event.checkedInUsers, $ne: userId },
+          'location.eventId': event._id,
+          owner: { $ne: userId },
           ...genderFilter,
         }).select('phoneNumber sexualOrientation gender');
 
@@ -319,9 +320,10 @@ module.exports.checkinAtEvent = async (req, res, next) => {
       }
     })().catch(err => logger.error('Unhandled SMS IIFE rejection:', err));
 
-    // Return compatible users at this event
+    // Return compatible users currently present at this event (by live location, not revenue list)
     const allCheckedIn = await profile.find({
-      owner: { $in: event.checkedInUsers, $ne: userId },
+      'location.eventId': event._id,
+      owner: { $ne: userId },
       ...genderFilter,
     }).select("name age gender profession bio interests convoStarter profilePicture sexualOrientation owner");
 
@@ -420,7 +422,8 @@ module.exports.getUsersAtEvent = async (req, res, next) => {
     }
 
     const allCheckedIn = await profile.find({
-      owner: { $in: event.checkedInUsers, $ne: userId },
+      'location.eventId': id,
+      owner: { $ne: userId },
       ...genderFilter,
     }).select("name age gender profession bio interests convoStarter profilePicture sexualOrientation owner");
 
