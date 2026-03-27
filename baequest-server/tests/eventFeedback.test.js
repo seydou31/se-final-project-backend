@@ -7,7 +7,7 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 const express = require('express');
 
 const EventFeedback = require('../models/eventFeedback');
-const Event = require('../models/event');
+const CuratedEvent = require('../models/curatedEvent');
 const User = require('../models/user');
 const errorHandler = require('../middleware/errorHandler');
 const eventFeedbackRouter = require('../routes/eventFeedback');
@@ -42,7 +42,7 @@ afterAll(async () => {
 
 afterEach(async () => {
   await EventFeedback.deleteMany({});
-  await Event.deleteMany({});
+  await CuratedEvent.deleteMany({});
   await User.deleteMany({});
   jest.clearAllMocks();
 });
@@ -50,11 +50,12 @@ afterEach(async () => {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function makeEvent() {
-  return Event.create({
-    title: 'Test Event',
-    date: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  return CuratedEvent.create({
+    name: 'Test Event',
+    address: '123 Main St',
+    startTime: new Date(Date.now() + 24 * 60 * 60 * 1000),
     endTime: new Date(Date.now() + 25 * 60 * 60 * 1000),
-    location: { name: 'Test Venue', address: '123 Main St' },
+    location: { type: 'Point', coordinates: [-77.0369, 38.9072] },
     city: 'Washington',
     state: 'DC',
   });
