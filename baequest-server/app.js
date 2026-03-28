@@ -159,8 +159,8 @@ mongoose
     server.listen(PORT, () => {
       logger.info(`App + Socket.io listening on port ${PORT}`);
     });
-    // Start the auto-checkout scheduler
-    scheduleAutoCheckout();
+    // Start the auto-checkout scheduler (pass io so it can emit event-ended)
+    scheduleAutoCheckout(io);
   })
   .catch((err) => {
     // console.error ensures the message is visible in docker logs even if Winston fails
