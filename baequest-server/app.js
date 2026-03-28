@@ -151,35 +151,54 @@ app.use(errorHandler);
 
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/baequest-db";
 
-// Auto-checkout all users at 2am daily
-function scheduleAutoCheckout() {
-  const now = new Date();
-  const next2am = new Date();
-  next2am.setHours(2, 0, 0, 0);
+// Schedule a timeout that fires exactly when the next event ends.
+// After each firing, re-schedules itself for the event after that.
+// Zero polling — only hits the DB when an event actually ends.
+async function scheduleAutoCheckout() {
+  const CuratedEvent = require('./models/curatedEvent');
 
-  // If it's past 2am today, schedule for tomorrow
-  if (now >= next2am) {
-    next2am.setDate(next2am.getDate() + 1);
+  // Find the soonest future (or just-ended) event end time
+  const nextEvent = await CuratedEvent.findOne(
+    { endTime: { $gt: new Date() } },
+    { endTime: 1 },
+    { sort: { endTime: 1 } }
+  );
+
+  if (!nextEvent) {
+    logger.info('Auto-checkout: no upcoming events, scheduler idle');
+    return;
   }
 
-  const msUntil2am = next2am.getTime() - now.getTime();
+  const msUntilEnd = nextEvent.endTime.getTime() - Date.now();
+  // setTimeout max is ~24.8 days; clamp to avoid overflow on very far future events
+  const delay = Math.min(msUntilEnd + 1000, 2147483647);
+
+  logger.info(`Auto-checkout scheduled for ${nextEvent.endTime.toISOString()}`);
 
   setTimeout(async () => {
     try {
-      // Clear presence from profiles only — checkedInUsers kept for revenue
-      const profileResult = await profile.updateMany(
-        { "location.eventId": { $exists: true, $ne: null } },
-        { $unset: { "location.eventId": "", "location.lat": "", "location.lng": "" }, $set: { "location.updatedAt": new Date() } }
+      const now = new Date();
+      // Clear presence for all events that have now ended
+      const endedEvents = await CuratedEvent.find(
+        { endTime: { $lte: now } },
+        { _id: 1 }
       );
-      logger.info(`Auto-checkout at 2am: ${profileResult.modifiedCount} users cleared from active event presence`);
+      if (endedEvents.length > 0) {
+        const endedIds = endedEvents.map(e => e._id);
+        const result = await profile.updateMany(
+          { "location.eventId": { $in: endedIds } },
+          { $unset: { "location.eventId": "", "location.lat": "", "location.lng": "" }, $set: { "location.updatedAt": now } }
+        );
+        if (result.modifiedCount > 0) {
+          logger.info(`Auto-checkout: cleared ${result.modifiedCount} users from ${endedIds.length} ended event(s)`);
+        }
+      }
     } catch (err) {
-      logger.error("Auto-checkout failed:", err);
+      logger.error('Auto-checkout failed:', err);
     }
-    // Reschedule for next day
+    // Schedule for the next upcoming event
     scheduleAutoCheckout();
-  }, msUntil2am);
-
-  logger.info(`Auto-checkout scheduled for ${next2am.toLocaleString()}`);
+  }, delay);
 }
 
 mongoose
