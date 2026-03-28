@@ -12,6 +12,7 @@ const { sendCheckinNotification } = require("../utils/sms");
 const { decryptPhone } = require("../utils/crypto");
 const logger = require("../utils/logger");
 const { isS3Configured } = require("../middleware/multer");
+const { scheduleAutoCheckout } = require("../utils/checkoutScheduler");
 
 // Haversine distance in km between two lat/lng points
 function haversineKm(lat1, lng1, lat2, lng2) {
@@ -129,6 +130,9 @@ module.exports.createEvent = async (req, res, next) => {
       endTime: end,
       ...(req.user?._id && { createdBy: req.user._id }),
     });
+
+    // Reschedule checkout in case this event ends sooner than the current one
+    scheduleAutoCheckout().catch(err => logger.error('Failed to reschedule checkout:', err));
 
     res.status(201).json({
       message: "Event created successfully",

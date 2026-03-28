@@ -28,7 +28,6 @@ const STATUS = require("./utils/errors");
 const errorHandler = require("./middleware/errorHandler");
 const logger = require("./utils/logger");
 const requestLogger = require("./middleware/requestLogger");
-const profile = require("./models/profile");
 const SECRET = require("./utils/config");
 
 const REQUIRED_ENV_VARS = ['JWT_SECRET', 'MONGODB_URI'];
@@ -151,55 +150,7 @@ app.use(errorHandler);
 
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/baequest-db";
 
-// Schedule a timeout that fires exactly when the next event ends.
-// After each firing, re-schedules itself for the event after that.
-// Zero polling — only hits the DB when an event actually ends.
-async function scheduleAutoCheckout() {
-  const CuratedEvent = require('./models/curatedEvent');
-
-  // Find the soonest future (or just-ended) event end time
-  const nextEvent = await CuratedEvent.findOne(
-    { endTime: { $gt: new Date() } },
-    { endTime: 1 },
-    { sort: { endTime: 1 } }
-  );
-
-  if (!nextEvent) {
-    logger.info('Auto-checkout: no upcoming events, scheduler idle');
-    return;
-  }
-
-  const msUntilEnd = nextEvent.endTime.getTime() - Date.now();
-  // setTimeout max is ~24.8 days; clamp to avoid overflow on very far future events
-  const delay = Math.min(msUntilEnd + 1000, 2147483647);
-
-  logger.info(`Auto-checkout scheduled for ${nextEvent.endTime.toISOString()}`);
-
-  setTimeout(async () => {
-    try {
-      const now = new Date();
-      // Clear presence for all events that have now ended
-      const endedEvents = await CuratedEvent.find(
-        { endTime: { $lte: now } },
-        { _id: 1 }
-      );
-      if (endedEvents.length > 0) {
-        const endedIds = endedEvents.map(e => e._id);
-        const result = await profile.updateMany(
-          { "location.eventId": { $in: endedIds } },
-          { $unset: { "location.eventId": "", "location.lat": "", "location.lng": "" }, $set: { "location.updatedAt": now } }
-        );
-        if (result.modifiedCount > 0) {
-          logger.info(`Auto-checkout: cleared ${result.modifiedCount} users from ${endedIds.length} ended event(s)`);
-        }
-      }
-    } catch (err) {
-      logger.error('Auto-checkout failed:', err);
-    }
-    // Schedule for the next upcoming event
-    scheduleAutoCheckout();
-  }, delay);
-}
+const { scheduleAutoCheckout } = require('./utils/checkoutScheduler');
 
 mongoose
   .connect(MONGODB_URI)
