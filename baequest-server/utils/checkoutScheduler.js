@@ -5,16 +5,35 @@ const logger = require('./logger');
 let pendingTimeout = null;
 let scheduledUntil = null;
 
+// Clear presence for any events that have already ended (catches missed checkouts
+// from server downtime / restarts).
+async function sweepEndedEvents() {
+  const now = new Date();
+  const endedEvents = await CuratedEvent.find({ endTime: { $lte: now } }, { _id: 1 });
+  if (endedEvents.length === 0) return;
+
+  const endedIds = endedEvents.map(e => e._id);
+  const result = await profile.updateMany(
+    { 'location.eventId': { $in: endedIds } },
+    { $unset: { 'location.eventId': '', 'location.lat': '', 'location.lng': '' }, $set: { 'location.updatedAt': now } }
+  );
+  if (result.modifiedCount > 0) {
+    logger.info(`Auto-checkout sweep: cleared ${result.modifiedCount} users from ${endedIds.length} ended event(s)`);
+  }
+}
+
 // Schedule a timeout that fires exactly when the next event ends.
 // Cancels any existing pending timeout and reschedules if the new event
 // ends sooner. Safe to call any time a new event is created.
 async function scheduleAutoCheckout() {
   try {
-    const nextEvent = await CuratedEvent.findOne(
-      { endTime: { $gt: new Date() } },
-      { endTime: 1 },
-      { sort: { endTime: 1 } }
-    );
+    // First sweep for any already-ended events (handles restart / missed fires)
+    await sweepEndedEvents();
+
+    // Find the soonest upcoming event using chained sort (more reliable than options API)
+    const nextEvent = await CuratedEvent.findOne({ endTime: { $gt: new Date() } })
+      .sort({ endTime: 1 })
+      .select('endTime');
 
     if (!nextEvent) {
       logger.info('Auto-checkout: no upcoming events, scheduler idle');
@@ -38,18 +57,7 @@ async function scheduleAutoCheckout() {
       pendingTimeout = null;
       scheduledUntil = null;
       try {
-        const now = new Date();
-        const endedEvents = await CuratedEvent.find({ endTime: { $lte: now } }, { _id: 1 });
-        if (endedEvents.length > 0) {
-          const endedIds = endedEvents.map(e => e._id);
-          const result = await profile.updateMany(
-            { 'location.eventId': { $in: endedIds } },
-            { $unset: { 'location.eventId': '', 'location.lat': '', 'location.lng': '' }, $set: { 'location.updatedAt': now } }
-          );
-          if (result.modifiedCount > 0) {
-            logger.info(`Auto-checkout: cleared ${result.modifiedCount} users from ${endedIds.length} ended event(s)`);
-          }
-        }
+        await sweepEndedEvents();
       } catch (err) {
         logger.error('Auto-checkout failed:', err);
       }
