@@ -180,12 +180,29 @@ module.exports.getEvents = async (req, res, next) => {
       events = await CuratedEvent.find(query).sort({ startTime: 1 }).lean();
     }
 
+    // Get live presence counts (men/women) per event in one aggregation
+    const eventIds = events.map(e => e._id);
+    const presenceCounts = await profile.aggregate([
+      { $match: { 'location.eventId': { $in: eventIds } } },
+      {
+        $group: {
+          _id: '$location.eventId',
+          men: { $sum: { $cond: [{ $eq: ['$gender', 'male'] }, 1, 0] } },
+          women: { $sum: { $cond: [{ $eq: ['$gender', 'female'] }, 1, 0] } },
+        },
+      },
+    ]);
+    const presenceMap = Object.fromEntries(
+      presenceCounts.map(p => [p._id.toString(), p])
+    );
+
     const result = events.map(event => {
       const eventLng = event.location.coordinates[0];
       const eventLat = event.location.coordinates[1];
       const distanceKm = (userLat && userLng)
         ? (event.distanceMeters / 1000)
         : null;
+      const presence = presenceMap[event._id?.toString()] || { men: 0, women: 0 };
 
       return {
         _id: event._id,
@@ -202,7 +219,8 @@ module.exports.getEvents = async (req, res, next) => {
         startTime: event.startTime,
         endTime: event.endTime,
         goingCount: event.usersGoing ? event.usersGoing.length : 0,
-        checkedInCount: event.checkedInUsers ? event.checkedInUsers.length : 0,
+        liveMen: presence.men,
+        liveWomen: presence.women,
         isUserGoing: event.usersGoing
           ? event.usersGoing.some(id => id.toString() === userId.toString())
           : false,
