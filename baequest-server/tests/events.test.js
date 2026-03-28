@@ -267,7 +267,8 @@ describe('GET /events — getEvents (auth required)', () => {
     expect(res.body).toHaveLength(1);
     expect(res.body[0].name).toBe('Test Event');
     expect(res.body[0]).toHaveProperty('goingCount', 0);
-    expect(res.body[0]).toHaveProperty('checkedInCount', 0);
+    expect(res.body[0]).toHaveProperty('liveMen', 0);
+    expect(res.body[0]).toHaveProperty('liveWomen', 0);
     expect(res.body[0]).toHaveProperty('isUserGoing', false);
   });
 
