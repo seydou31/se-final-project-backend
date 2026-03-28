@@ -4,7 +4,7 @@ const logger = require('./logger');
 
 let pendingTimeout = null;
 let scheduledUntil = null;
-let _io = null;
+let ioInstance = null;
 
 // Clear presence for any events that have already ended (catches missed checkouts
 // from server downtime / restarts).
@@ -21,9 +21,9 @@ async function sweepEndedEvents() {
   if (result.modifiedCount > 0) {
     logger.info(`Auto-checkout sweep: cleared ${result.modifiedCount} users from ${endedIds.length} ended event(s)`);
     // Notify all clients in each ended event's socket room
-    if (_io) {
+    if (ioInstance) {
       endedIds.forEach(eventId => {
-        _io.to(`event_${eventId}`).emit('event-ended', { eventId });
+        ioInstance.to(`event_${eventId}`).emit('event-ended', { eventId });
       });
     }
   }
@@ -33,7 +33,7 @@ async function sweepEndedEvents() {
 // Cancels any existing pending timeout and reschedules if the new event
 // ends sooner. Safe to call any time a new event is created.
 async function scheduleAutoCheckout(io) {
-  if (io) _io = io;
+  if (io) ioInstance = io;
   try {
     // First sweep for any already-ended events (handles restart / missed fires)
     await sweepEndedEvents();
