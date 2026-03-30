@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs").promises;
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const Stripe = require("stripe");
 const CuratedEvent = require("../models/curatedEvent");
 const profile = require("../models/profile");
 const user = require("../models/user");
@@ -13,6 +14,9 @@ const { decryptPhone } = require("../utils/crypto");
 const logger = require("../utils/logger");
 const { isS3Configured } = require("../middleware/multer");
 const { scheduleAutoCheckout } = require("../utils/checkoutScheduler");
+
+const getStripe = () => Stripe(process.env.STRIPE_SECRET_KEY);
+const FRONTEND_URL = process.env.FRONTEND_URL || "https://baequests.com";
 
 // Haversine distance in km between two lat/lng points
 function haversineKm(lat1, lng1, lat2, lng2) {
@@ -80,7 +84,7 @@ async function uploadEventPhoto(file) {
 
 // Create a new curated event (public - no auth required)
 module.exports.createEvent = async (req, res, next) => {
-  const { name, address, city, state, zipcode, lat, lng, startTime, endTime, description, link } = req.body;
+  const { name, address, city, state, zipcode, lat, lng, startTime, endTime, description, link, ticketPrice } = req.body;
 
   try {
     // Validate required fields
@@ -128,6 +132,7 @@ module.exports.createEvent = async (req, res, next) => {
       },
       startTime: start,
       endTime: end,
+      ...(ticketPrice != null && { ticketPrice: Math.round(parseFloat(ticketPrice) * 100) }),
       ...(req.user?._id && { createdBy: req.user._id }),
     });
 
@@ -219,6 +224,7 @@ module.exports.getEvents = async (req, res, next) => {
         startTime: event.startTime,
         endTime: event.endTime,
         goingCount: event.usersGoing ? event.usersGoing.length : 0,
+        ticketPrice: event.ticketPrice || 0,
         liveMen: presence.men,
         liveWomen: presence.women,
         isUserGoing: event.usersGoing
@@ -287,6 +293,38 @@ module.exports.checkinAtEvent = async (req, res, next) => {
     if (Number.isNaN(distanceKm) || distanceKm > 1.60934) {
       const distanceMiles = (distanceKm * 0.621371).toFixed(1);
       throw new BadRequestError(`You must be within 1 mile of the event to check in. You are ${distanceMiles} miles away.`);
+    }
+
+    // If event has a ticket price, redirect to Stripe Checkout
+    if (event.ticketPrice > 0 && event.createdBy) {
+      const eventCreator = await user.findById(event.createdBy);
+      if (eventCreator?.stripeOnboardingComplete && eventCreator?.stripeAccountId) {
+        const stripe = getStripe();
+        const session = await stripe.checkout.sessions.create({
+          payment_method_types: ['card'],
+          line_items: [{
+            price_data: {
+              currency: 'usd',
+              product_data: { name: event.name },
+              unit_amount: event.ticketPrice,
+            },
+            quantity: 1,
+          }],
+          mode: 'payment',
+          success_url: `${FRONTEND_URL}/events?checkin_success=true&eventId=${id}`,
+          cancel_url: `${FRONTEND_URL}/events`,
+          payment_intent_data: {
+            transfer_data: { destination: eventCreator.stripeAccountId },
+          },
+          metadata: {
+            userId: userId.toString(),
+            eventId: id,
+            lat: lat.toString(),
+            lng: lng.toString(),
+          },
+        });
+        return res.json({ requiresPayment: true, checkoutUrl: session.url });
+      }
     }
 
     // Atomically add user to checkedInUsers (prevents race condition duplicates)

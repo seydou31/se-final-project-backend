@@ -234,6 +234,10 @@ const createEventSchema = Joi.object({
   link: Joi.string().uri().max(500).optional().allow("").messages({
     "string.uri": "Link must be a valid URL",
   }),
+  ticketPrice: Joi.number().integer().min(0).optional().messages({
+    "number.min": "Ticket price cannot be negative",
+    "number.integer": "Ticket price must be a whole number of cents",
+  }),
 });
 
 // Event validation schemas

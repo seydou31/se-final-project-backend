@@ -109,6 +109,8 @@ const limiter = rateLimit({
   validate: { trustProxy: true }
 });
 app.use(limiter);
+// Stripe webhook needs raw body — must be before express.json()
+app.use('/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

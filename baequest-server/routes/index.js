@@ -48,4 +48,9 @@ const eventManagerRouter = require('./eventManagers');
 
 router.use('/event-managers', eventManagerRouter);
 
+// Stripe webhook (raw body handled in app.js before express.json)
+const { stripeWebhook } = require('../controllers/stripeWebhook');
+
+router.post('/stripe/webhook', stripeWebhook);
+
 module.exports = router;

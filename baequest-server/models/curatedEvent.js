@@ -63,6 +63,11 @@ const curatedEventSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'user',
   }],
+  ticketPrice: {
+    type: Number,
+    default: 0, // stored in cents (e.g. 500 = $5.00)
+    min: 0,
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'user',
