@@ -224,7 +224,7 @@ module.exports.getEvents = async (req, res, next) => {
         startTime: event.startTime,
         endTime: event.endTime,
         goingCount: event.usersGoing ? event.usersGoing.length : 0,
-        ticketPrice: event.ticketPrice || 0,
+        ticketPrice: parseInt(process.env.TICKET_PRICE || '0', 10),
         liveMen: presence.men,
         liveWomen: presence.women,
         isUserGoing: event.usersGoing
@@ -295,8 +295,9 @@ module.exports.checkinAtEvent = async (req, res, next) => {
       throw new BadRequestError(`You must be within 1 mile of the event to check in. You are ${distanceMiles} miles away.`);
     }
 
-    // If event has a ticket price, redirect to Stripe Checkout
-    if (event.ticketPrice > 0 && event.createdBy) {
+    // If a global ticket price is set, redirect to Stripe Checkout
+    const globalTicketPrice = parseInt(process.env.TICKET_PRICE || '0', 10);
+    if (globalTicketPrice > 0 && event.createdBy) {
       const eventCreator = await user.findById(event.createdBy);
       if (eventCreator?.stripeOnboardingComplete && eventCreator?.stripeAccountId) {
         const stripe = getStripe();
@@ -306,7 +307,7 @@ module.exports.checkinAtEvent = async (req, res, next) => {
             price_data: {
               currency: 'usd',
               product_data: { name: event.name },
-              unit_amount: event.ticketPrice,
+              unit_amount: globalTicketPrice,
             },
             quantity: 1,
           }],
