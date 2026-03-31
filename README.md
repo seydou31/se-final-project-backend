@@ -1,180 +1,140 @@
-# 🧩 BaeQuest Backend
+# BaeQuest Backend
 
-The **BaeQuest Backend** powers the geolocation-driven dating experience of the BaeQuest platform.  
-It handles event management, user authentication, check-ins, and location validation to ensure that members physically attend real-world events before connecting with others.
+The BaeQuest backend powers the event discovery, geolocation check-in, real-time attendee tracking, and payment processing for the BaeQuest platform.
 
----
-
-## ⚙️ Overview
-
-The backend provides secure RESTful APIs that support the following:
-- User authentication and authorization (JWT-based)
-- Event creation, listing, and attendance tracking
-- Geolocation-based user check-ins
-- Distance validation between users and events
-- Real-time updates of attendees at active events
+API base URL: https://api.baequests.com
+Frontend repo: https://github.com/seydou31/se-final-project
 
 ---
 
-## 🧠 Core Features
+## Tech Stack
 
-1. **User Authentication**
-   - Register, login, and manage sessions securely using JWT tokens.
-   - Protects event and check-in routes with authorization middleware.
-
-2. **Event Management**
-   - Create, update, and delete local events.
-   - Store event details such as location coordinates, date, and participant list.
-
-3. **Geolocation Check-In**
-   - Validates that users are within a specific radius of the event before allowing check-in.
-   - Returns feedback messages (e.g., “You are too far from the event to check in”).
-
-4. **Navigation Prompt**
-   - If the user is too far, the frontend triggers Google Maps navigation to the event location.
-
-5. **User Discovery**
-   - Retrieve all users currently checked into the same event.
-   - Enables the frontend to display nearby attendees.
+- **Node.js + Express** – REST API server
+- **MongoDB + Mongoose** – Database (hosted on MongoDB Atlas)
+- **Socket.io** – Real-time check-in/checkout events
+- **JWT + bcryptjs** – Authentication and password hashing
+- **Stripe Connect** – Per-event payments and event manager payouts
+- **Resend** – Transactional email (verification, feedback requests)
+- **Twilio** – SMS notifications when a compatible user checks in nearby
+- **AWS S3** – Profile picture and event photo storage
+- **Sharp** – Image optimization before upload
+- **Helmet + express-rate-limit** – Security hardening
+- **Sentry** – Error monitoring
+- **Winston** – Structured logging
+- **Docker** – Containerized deployment with blue-green strategy on GCP
 
 ---
 
-## 🧰 Tech Stack
+## API Endpoints
 
-- **Node.js** – JavaScript runtime for building scalable backend services.  
-- **Express.js** – Fast, unopinionated web framework for building REST APIs.  
-- **MongoDB + Mongoose** – NoSQL database for storing users, events, and attendance data.  
-- **JWT (JSON Web Tokens)** – Secure user authentication and route protection.  
-- **bcrypt.js** – For password hashing and user credential security.  
-- **dotenv** – Environment variable management.  
-- **CORS** – Middleware for handling cross-origin requests from the frontend.  
-
----
-
-## 📡 API Endpoints
-
-### Authentication
+### Auth
 | Method | Endpoint | Description |
-|--------|-----------|-------------|
-| POST | `/api/auth/register` | Register a new user |
-| POST | `/api/auth/login` | Log in and receive a JWT token |
-| GET | `/api/auth/me` | Get authenticated user details |
+|--------|----------|-------------|
+| POST | `/signup` | Register a new user |
+| POST | `/signin` | Log in |
+| POST | `/logout` | Log out |
+| POST | `/refresh-token` | Refresh JWT |
+| POST | `/auth/google` | Google OAuth |
+| POST | `/password-reset/request` | Request password reset email |
+| POST | `/password-reset/reset` | Reset password with token |
+| POST | `/email-verification/send` | Send verification email |
+| POST | `/email-verification/verify` | Verify email address |
+
+### Users / Profiles
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/users/profile` | Create profile |
+| GET | `/users/profile` | Get own profile |
+| PATCH | `/users/profile` | Update profile |
+| DELETE | `/users/profile` | Delete profile |
+| POST | `/users/profile/picture` | Upload profile picture |
 
 ### Events
 | Method | Endpoint | Description |
-|--------|-----------|-------------|
-| GET | `/api/events` | Get all active events |
-| GET | `/api/events/:id` | Get a single event by ID |
-| POST | `/api/events` | Create a new event (admin only) |
-| PUT | `/api/events/:id` | Update event details |
-| DELETE | `/api/events/:id` | Delete an event |
+|--------|----------|-------------|
+| GET | `/events` | Get upcoming events (auth required) |
+| GET | `/events/nearby` | Get events near coordinates |
+| POST | `/events` | Create event (event manager only) |
+| POST | `/events/:id/going` | Toggle I'm Going |
+| POST | `/events/:id/checkin` | Check in (validates geolocation, handles Stripe) |
+| POST | `/events/:id/checkout` | Check out |
+| POST | `/events/:id/heartbeat` | Update location while checked in |
+| GET | `/events/:id/users` | Get compatible users at event |
 
-### Check-Ins
+### Event Feedback
 | Method | Endpoint | Description |
-|--------|-----------|-------------|
-| POST | `/api/checkin` | Validate user’s distance and mark attendance |
-| GET | `/api/checkin/:eventId/users` | Get all users currently at an event |
+|--------|----------|-------------|
+| POST | `/events/feedback-request` | Create feedback request after checkout |
+| GET | `/events/feedback/:token` | Get feedback form (via email link) |
+| POST | `/events/feedback/:token` | Submit feedback |
+| GET | `/events/event/:eventId/feedback` | Get all feedback for an event |
+| GET | `/events/venue-suggestions` | Get all venue suggestions |
+
+### Event Managers
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/event-managers/signup` | Register (invite code required) |
+| POST | `/event-managers/signin` | Log in |
+| GET | `/event-managers/me` | Get own manager profile |
+| GET | `/event-managers/dashboard` | Get events, check-in counts, earnings |
+| POST | `/event-managers/stripe/onboard` | Get Stripe Connect onboarding link |
+| POST | `/event-managers/stripe/verify` | Verify Stripe onboarding completion |
+
+### Stripe
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/stripe/webhook` | Handle Stripe webhook events |
+
+### Health
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check (used by Docker and load balancers) |
 
 ---
 
-## 🧮 Geolocation Logic
-
-Each check-in compares the user’s current coordinates to the event’s coordinates using the **Haversine formula** to calculate distance on Earth’s surface.
-
-If the distance is greater than the allowed threshold (e.g., 100 meters), the system returns:
-```json
-{
-  "message": "User is too far away from the event, and must get directions.",
-  "newEvent": { ...eventData }
-}
-```
-
----
-
-## 🚀 Installation & Setup
-
-### Prerequisites
-Before you begin, ensure you have the following installed:
-- **Node.js** (v14 or higher) - [Download here](https://nodejs.org/)
-- **MongoDB** (local or cloud instance) - [Download here](https://www.mongodb.com/try/download/community) or use [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
-- **npm** or **yarn** package manager
-- **Git** for version control
-
-### Step 1: Clone the Repository
-```bash
-git clone https://github.com/seydou31/se_project_express.git
-cd se_project_express
-```
-
-### Step 2: Install Dependencies
-```bash
-npm install
-```
-
-### Step 3: Configure Environment Variables
-Create a `.env` file in the root directory and add the following variables:
+## Environment Variables
 
 ```env
-# Server Configuration
 PORT=3001
 NODE_ENV=development
-
-# MongoDB Configuration
-MONGO_URI=mongodb://localhost:27017/baequest
-# Or use MongoDB Atlas:
-# MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/baequest
-
-# JWT Secret (use a strong random string)
-JWT_SECRET=your_super_secure_jwt_secret_key_here
-JWT_EXPIRE=7d
-
-# CORS Configuration (frontend URL)
-CORS_ORIGIN=http://localhost:3000
-
-# Geolocation Settings
-MAX_CHECKIN_DISTANCE=100  # Distance in meters
-
-# Google Places API (optional)
-GOOGLE_PLACES_API_KEY=your_google_places_api_key_here
+JWT_SECRET=
+MONGODB_URI=mongodb+srv://...
+RESEND_API_KEY=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_PHONE_NUMBER=
+PHONE_ENCRYPTION_KEY=
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_REGION=
+AWS_S3_BUCKET_NAME=
+GOOGLE_PLACES_API_KEY=
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+TICKET_PRICE=           # in cents, e.g. 300 = $3.00
+FRONTEND_URL=https://baequests.com
+SENTRY_DSN=
+EVENT_MANAGER_INVITE_CODE=
 ```
 
-### Step 4: Set Up MongoDB
-**Option A: Local MongoDB**
-1. Start your local MongoDB server:
-   ```bash
-   mongod
-   ```
+---
 
-**Option B: MongoDB Atlas (Cloud)**
-1. Create a free account at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
-2. Create a new cluster
-3. Get your connection string and update `MONGO_URI` in `.env`
+## Local Development
 
-### Step 5: Start the Development Server
 ```bash
+git clone https://github.com/seydou31/se-final-project-backend.git
+cd se-final-project-backend/baequest-server
+npm install
 npm run dev
 ```
 
-The server should now be running at `http://localhost:3001`
-
-### Step 6: Verify Installation
-Test the API is running by visiting:
-```
-http://localhost:3001/api/events
-```
-
-Or use curl:
-```bash
-curl http://localhost:3001/api/events
-```
+Server runs at `http://localhost:3001`.
 
 ---
 
-## 📝 Available Scripts
+## Deployment
 
-- `npm start` - Start the production server
-- `npm run dev` - Start the development server with hot reload (nodemon)
-- `npm test` - Run test suite
-- `npm run lint` - Run ESLint for code quality checks
-
----
+Deployed via GitHub Actions CI/CD to a GCP VM using a blue-green Docker strategy:
+1. Tests and lint run on push to `main`
+2. Docker image is built and uploaded as a GitHub release asset
+3. SSH deploys to the VM — new container starts on the inactive port, health-checked, then nginx switches traffic over
