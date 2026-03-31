@@ -68,6 +68,10 @@ const curatedEventSchema = new mongoose.Schema({
     default: 0, // stored in cents (e.g. 500 = $5.00)
     min: 0,
   },
+  paidCheckinCount: {
+    type: Number,
+    default: 0, // total completed payments, never decrements
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'user',

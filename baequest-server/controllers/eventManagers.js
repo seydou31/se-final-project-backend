@@ -12,7 +12,7 @@ const { sendVerificationEmail } = require('../utils/email');
 const getStripe = () => Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Ticket price in dollars (env var is in cents, e.g. TICKET_PRICE=500 → $5.00)
-const ticketPriceDollars = () => parseInt(process.env.TICKET_PRICE || '500', 10) / 100;
+const ticketPriceDollars = () => parseInt(process.env.TICKET_PRICE || '0', 10) / 100;
 const MANAGER_SHARE = 0.30;
 
 const COOKIE_OPTIONS = {
@@ -118,7 +118,7 @@ module.exports.getMe = async (req, res, next) => {
 module.exports.getDashboard = async (req, res, next) => {
   try {
     const events = await CuratedEvent.find({ createdBy: req.user._id })
-      .select('name startTime endTime checkedInUsers')
+      .select('name startTime endTime checkedInUsers paidCheckinCount')
       .lean();
 
     const price = ticketPriceDollars();
@@ -129,7 +129,7 @@ module.exports.getDashboard = async (req, res, next) => {
       startTime: event.startTime,
       endTime: event.endTime,
       checkinCount: event.checkedInUsers.length,
-      earnings: (event.checkedInUsers.length * price * MANAGER_SHARE).toFixed(2),
+      earnings: ((event.paidCheckinCount || 0) * price * MANAGER_SHARE).toFixed(2),
     }));
 
     const totalCheckins = eventStats.reduce((sum, e) => sum + e.checkinCount, 0);
