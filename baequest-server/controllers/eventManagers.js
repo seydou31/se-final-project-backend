@@ -128,7 +128,7 @@ module.exports.getDashboard = async (req, res, next) => {
       name: event.name,
       startTime: event.startTime,
       endTime: event.endTime,
-      checkinCount: event.checkedInUsers.length,
+      checkinCount: event.paidCheckinCount || 0,
       earnings: ((event.paidCheckinCount || 0) * price * MANAGER_SHARE).toFixed(2),
     }));
 
