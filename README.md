@@ -15,7 +15,7 @@ Frontend repo: https://github.com/seydou31/se-final-project
 - **JWT + bcryptjs** – Authentication and password hashing
 - **Stripe Connect** – Per-event payments and event manager payouts
 - **Resend** – Transactional email (verification, feedback requests)
-- **Twilio** – SMS notifications when a compatible user checks in nearby
+- **AWS SNS** – SMS notifications when a compatible user checks in nearby
 - **AWS S3** – Profile picture and event photo storage
 - **Sharp** – Image optimization before upload
 - **Helmet + express-rate-limit** – Security hardening
@@ -100,9 +100,7 @@ NODE_ENV=development
 JWT_SECRET=
 MONGODB_URI=mongodb+srv://...
 RESEND_API_KEY=
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-TWILIO_PHONE_NUMBER=
+SMS_ORIGINATION_NUMBER=  # AWS SNS origination number
 PHONE_ENCRYPTION_KEY=
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
