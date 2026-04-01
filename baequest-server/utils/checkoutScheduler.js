@@ -69,7 +69,7 @@ async function scheduleAutoCheckout(io) {
       } catch (err) {
         logger.error('Auto-checkout failed:', err);
       }
-      scheduleAutoCheckout();
+      scheduleAutoCheckout(ioInstance);
     }, delay);
     // unref so the timer doesn't keep the process alive (e.g. during tests)
     pendingTimeout.unref();

@@ -160,8 +160,11 @@ module.exports.getEvents = async (req, res, next) => {
     if (state) query.state = new RegExp(`^${escapeRegex(state)}$`, 'i');
     if (city) query.city = new RegExp(`^${escapeRegex(city)}$`, 'i');
     if (zipcode) query.zipcode = zipcode;
-    if (dateFrom) query.startTime = { ...query.startTime, $gte: new Date(dateFrom) };
-    if (dateTo) query.startTime = { ...query.startTime, $lte: new Date(dateTo) };
+    if (dateFrom || dateTo) {
+      query.startTime = {};
+      if (dateFrom) query.startTime.$gte = new Date(dateFrom);
+      if (dateTo) query.startTime.$lte = new Date(dateTo);
+    }
 
     let events;
     const userLat = lat ? parseFloat(lat) : null;
@@ -372,8 +375,11 @@ module.exports.checkinAtEvent = async (req, res, next) => {
 
         await Promise.allSettled(
           compatible.map(u => {
-            let phone = u.phoneNumber;
-            try { phone = decryptPhone(phone); } catch (e) { /* leave as-is */ }
+            let phone;
+            try { phone = decryptPhone(u.phoneNumber); } catch (e) {
+              logger.warn(`Failed to decrypt phone for user ${u._id}, skipping SMS`);
+              return Promise.resolve();
+            }
             return sendCheckinNotification(phone, currentUserProfile.name, event.name);
           })
         );

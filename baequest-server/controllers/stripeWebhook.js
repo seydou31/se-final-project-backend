@@ -6,9 +6,8 @@ const logger = require('../utils/logger');
 const getStripe = () => Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Shared checkin completion logic (used by webhook after payment)
+// Note: checkedInUsers is already updated atomically before calling this function
 async function performCheckin(userId, eventId, lat, lng, io) {
-  await CuratedEvent.findByIdAndUpdate(eventId, { $addToSet: { checkedInUsers: userId } });
-
   const currentUserProfile = await profile.findOneAndUpdate(
     { owner: userId },
     { location: { eventId, lat, lng, updatedAt: new Date() } },
@@ -47,19 +46,20 @@ module.exports.stripeWebhook = async (req, res) => {
     try {
       const io = req.app.get('io');
 
-      // Idempotency: only increment paidCheckinCount if user wasn't already checked in
-      const alreadyCheckedIn = await CuratedEvent.findOne({
-        _id: eventId,
-        checkedInUsers: userId,
-      });
+      // Idempotency: use findOneAndUpdate to atomically add user and detect if already present
+      const updated = await CuratedEvent.findOneAndUpdate(
+        { _id: eventId, checkedInUsers: { $ne: userId } },
+        { $addToSet: { checkedInUsers: userId }, $inc: { paidCheckinCount: 1 } },
+        { new: false }
+      );
 
-      await performCheckin(userId, eventId, parseFloat(lat), parseFloat(lng), io);
-
-      if (!alreadyCheckedIn) {
-        await CuratedEvent.findByIdAndUpdate(eventId, { $inc: { paidCheckinCount: 1 } });
+      if (updated) {
+        // User was not already checked in — complete the checkin
+        await performCheckin(userId, eventId, parseFloat(lat), parseFloat(lng), io);
+        logger.info(`Webhook: checked in user ${userId} at event ${eventId} after payment`);
+      } else {
+        logger.info(`Webhook: user ${userId} already checked in at event ${eventId}, skipping duplicate`);
       }
-
-      logger.info(`Webhook: checked in user ${userId} at event ${eventId} after payment`);
     } catch (err) {
       logger.error('Webhook checkin failed:', err);
     }
