@@ -332,6 +332,16 @@ module.exports.checkinAtEvent = async (req, res, next) => {
       }
     }
 
+    // If user is already checked into a different event, clear that presence first
+    const existingPresence = await profile.findOne({ owner: userId, 'location.eventId': { $exists: true, $ne: null } });
+    if (existingPresence?.location?.eventId && String(existingPresence.location.eventId) !== String(id)) {
+      const io = req.app.get("io");
+      io.to(`event_${existingPresence.location.eventId}`).emit("user-checked-out", {
+        userId,
+        eventId: existingPresence.location.eventId,
+      });
+    }
+
     // Atomically add user to checkedInUsers (prevents race condition duplicates)
     await CuratedEvent.findByIdAndUpdate(id, { $addToSet: { checkedInUsers: userId } });
 
@@ -434,23 +444,26 @@ module.exports.checkoutFromEvent = async (req, res, next) => {
     // Fire-and-forget feedback email
     (async () => {
       try {
-        const existing = await EventFeedback.findOne({ userId, eventId: event._id });
-        if (existing) return;
-
         const foundUser = await user.findById(userId);
         if (!foundUser?.email) return;
 
         const token = crypto.randomBytes(32).toString('hex');
-        await EventFeedback.create({
-          userId,
-          eventId: event._id,
-          placeName: event.name,
-          placeAddress: event.address || '',
-          token,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          emailSent: true,
-          emailSentAt: new Date(),
-        });
+        const inserted = await EventFeedback.findOneAndUpdate(
+          { userId, eventId: event._id },
+          { $setOnInsert: {
+            userId,
+            eventId: event._id,
+            placeName: event.name,
+            placeAddress: event.address || '',
+            token,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            emailSent: true,
+            emailSentAt: new Date(),
+          }},
+          { upsert: true, new: false }
+        );
+        // If inserted is not null, record already existed — skip email
+        if (inserted !== null) return;
 
         const feedbackUrl = `${process.env.FRONTEND_URL || 'https://baequests.com'}/event-feedback?token=${token}`;
         await sendFeedbackRequestEmail(foundUser.email, feedbackUrl, {
