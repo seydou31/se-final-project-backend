@@ -45,7 +45,7 @@ const allowedOrigins = isProduction
   : ["https://baequests.com", "http://localhost:3000", "http://localhost:5173"];
 
 const app = express();
-app.set('trust proxy', true);
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 const io = new Server(server, {
@@ -105,8 +105,7 @@ const limiter = rateLimit({
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
-  // Trust proxy is enabled via app.set('trust proxy', true)
-  validate: { trustProxy: true }
+  validate: { trustProxy: false }
 });
 app.use(limiter);
 // Stripe webhook needs raw body — must be before express.json()
