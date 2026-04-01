@@ -2,6 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const profile = require("../models/profile");
+const CuratedEvent = require('../models/curatedEvent');
 const logger = require("../utils/logger");
 const { NotFoundError } = require("../utils/customErrors");
 const { isS3Configured } = require('../middleware/multer');
@@ -79,7 +80,6 @@ module.exports.deleteProfile = async (req, res, next) => {
       throw new NotFoundError("profile not found");
     });
     // Remove user from all event checkedInUsers and usersGoing arrays
-    const CuratedEvent = require('../models/curatedEvent');
     await CuratedEvent.updateMany(
       { $or: [{ checkedInUsers: userId }, { usersGoing: userId }] },
       { $pull: { checkedInUsers: userId, usersGoing: userId } }
