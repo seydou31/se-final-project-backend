@@ -179,10 +179,11 @@ module.exports.getEvents = async (req, res, next) => {
             query,
           },
         },
+        { $limit: 10 },
       ];
       events = await CuratedEvent.aggregate(pipeline);
     } else {
-      events = await CuratedEvent.find(query).sort({ startTime: 1 }).lean();
+      events = await CuratedEvent.find(query).sort({ startTime: 1 }).limit(10).lean();
     }
 
     // Get live presence counts (men/women) per event in one aggregation
