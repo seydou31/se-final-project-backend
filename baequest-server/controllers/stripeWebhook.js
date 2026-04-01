@@ -46,8 +46,19 @@ module.exports.stripeWebhook = async (req, res) => {
 
     try {
       const io = req.app.get('io');
+
+      // Idempotency: only increment paidCheckinCount if user wasn't already checked in
+      const alreadyCheckedIn = await CuratedEvent.findOne({
+        _id: eventId,
+        checkedInUsers: userId,
+      });
+
       await performCheckin(userId, eventId, parseFloat(lat), parseFloat(lng), io);
-      await CuratedEvent.findByIdAndUpdate(eventId, { $inc: { paidCheckinCount: 1 } });
+
+      if (!alreadyCheckedIn) {
+        await CuratedEvent.findByIdAndUpdate(eventId, { $inc: { paidCheckinCount: 1 } });
+      }
+
       logger.info(`Webhook: checked in user ${userId} at event ${eventId} after payment`);
     } catch (err) {
       logger.error('Webhook checkin failed:', err);

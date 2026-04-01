@@ -391,9 +391,9 @@ module.exports.checkinAtEvent = async (req, res, next) => {
 
     const compatibleUsers = allCheckedIn.filter(u => {
       if (sexualOrientation === 'bisexual') return true;
+      if (u.sexualOrientation === 'bisexual') return true;
       if (u.sexualOrientation === 'straight') return u.gender !== userGender;
       if (u.sexualOrientation === 'gay') return u.gender === userGender;
-      if (u.sexualOrientation === 'bisexual') return true;
       return false;
     });
 
@@ -403,6 +403,8 @@ module.exports.checkinAtEvent = async (req, res, next) => {
     return next(err);
   }
 };
+
+
 
 // Check out from an event
 module.exports.checkoutFromEvent = async (req, res, next) => {
@@ -491,9 +493,9 @@ module.exports.getUsersAtEvent = async (req, res, next) => {
 
     const compatibleUsers = allCheckedIn.filter(u => {
       if (sexualOrientation === 'bisexual') return true;
+      if (u.sexualOrientation === 'bisexual') return true;
       if (u.sexualOrientation === 'straight') return u.gender !== userGender;
       if (u.sexualOrientation === 'gay') return u.gender === userGender;
-      if (u.sexualOrientation === 'bisexual') return true;
       return false;
     });
 
