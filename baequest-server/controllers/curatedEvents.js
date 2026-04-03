@@ -319,7 +319,8 @@ module.exports.checkinAtEvent = async (req, res, next) => {
           success_url: `${FRONTEND_URL}/events?checkin_success=true&eventId=${id}`,
           cancel_url: `${FRONTEND_URL}/events`,
           payment_intent_data: {
-            transfer_data: { destination: eventCreator.stripeAccountId },
+            application_fee_amount: Math.round(globalTicketPrice * 0.70), // BaeQuest keeps 70%
+            transfer_data: { destination: eventCreator.stripeAccountId }, // remaining 30% to manager
           },
           metadata: {
             userId: userId.toString(),
