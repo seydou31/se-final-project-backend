@@ -396,14 +396,14 @@ describe('POST /events/:id/checkin — checkinAtEvent', () => {
     expect(updated.checkedInUsers.map(id => id.toString())).toContain(userId.toString());
   });
 
-  it('should return 400 when user is more than 1 mile away', async () => {
+  it('should return 400 when user is more than 0.5 miles away', async () => {
     const res = await request(app)
       .post(`/events/${testEvent._id}/checkin`)
       .set('Cookie', [`jwt=${token}`])
       .send({ lat: FAR_LAT, lng: FAR_LNG });
 
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/1 mile/i);
+    expect(res.body.message).toMatch(/0\.5 miles/i);
   });
 
   it('should return 400 when coordinates are missing', async () => {
