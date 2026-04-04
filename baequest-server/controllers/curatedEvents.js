@@ -289,14 +289,14 @@ module.exports.checkinAtEvent = async (req, res, next) => {
       throw new BadRequestError('Event location coordinates are not set correctly');
     }
 
-    // Validate user is within 1 mile (1.60934 km)
+    // Validate user is within 0.5 miles (0.80467 km)
     const eventLat = coords[1];
     const eventLng = coords[0];
     const distanceKm = haversineKm(parseFloat(lat), parseFloat(lng), eventLat, eventLng);
 
-    if (Number.isNaN(distanceKm) || distanceKm > 1.60934) {
+    if (Number.isNaN(distanceKm) || distanceKm > 0.80467) {
       const distanceMiles = (distanceKm * 0.621371).toFixed(1);
-      throw new BadRequestError(`You must be within 1 mile of the event to check in. You are ${distanceMiles} miles away.`);
+      throw new BadRequestError(`You must be within 0.5 miles of the event to check in. You are ${distanceMiles} miles away.`);
     }
 
     // If a global ticket price is set, redirect to Stripe Checkout
