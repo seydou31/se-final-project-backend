@@ -178,6 +178,7 @@ module.exports.getEvents = async (req, res, next) => {
           $geoNear: {
             near: { type: "Point", coordinates: [userLng, userLat] },
             distanceField: "distanceMeters",
+            maxDistance: 80467, // 50 miles in meters
             spherical: true,
             query,
           },
