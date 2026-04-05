@@ -167,16 +167,27 @@ module.exports.getEvents = async (req, res, next) => {
     }
 
     let events;
-    const userLat = lat ? parseFloat(lat) : null;
-    const userLng = lng ? parseFloat(lng) : null;
+    let centerLat = lat ? parseFloat(lat) : null;
+    let centerLng = lng ? parseFloat(lng) : null;
 
-    if (userLat && userLng) {
-      // Sort by distance using $near — must use a separate query then apply filters
+    // ZIP is most precise — override center coordinates with ZIP's location
+    if (zipcode) {
+      try {
+        const zipCoords = await getCoordinatesFromAddress(zipcode);
+        centerLat = zipCoords.lat;
+        centerLng = zipCoords.lng;
+      } catch (_) {
+        // Fall back to user GPS coords if ZIP geocoding fails
+      }
+    }
+
+    if (centerLat && centerLng) {
       // Use $geoNear in aggregate for filtering + distance in one pass
+      // Priority: ZIP coords > user GPS coords
       const pipeline = [
         {
           $geoNear: {
-            near: { type: "Point", coordinates: [userLng, userLat] },
+            near: { type: "Point", coordinates: [centerLng, centerLat] },
             distanceField: "distanceMeters",
             maxDistance: 80467, // 50 miles in meters
             spherical: true,
@@ -209,7 +220,7 @@ module.exports.getEvents = async (req, res, next) => {
     const result = events.map(event => {
       const eventLng = event.location.coordinates[0];
       const eventLat = event.location.coordinates[1];
-      const distanceKm = (userLat && userLng)
+      const distanceKm = (centerLat && centerLng)
         ? (event.distanceMeters / 1000)
         : null;
       const presence = presenceMap[event._id?.toString()] || { men: 0, women: 0 };
