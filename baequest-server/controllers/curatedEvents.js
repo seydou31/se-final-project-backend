@@ -170,37 +170,9 @@ module.exports.getEvents = async (req, res, next) => {
     const userLat = lat ? parseFloat(lat) : null;
     const userLng = lng ? parseFloat(lng) : null;
 
-    if (city || state) {
-      // City/state search — return all matching events, no distance cap
+    if (city || state || zipcode) {
+      // Text search — return all matching events, no distance cap
       events = await CuratedEvent.find(query).sort({ startTime: 1 }).lean();
-    } else if (zipcode) {
-      // ZIP search — center 100-mile cap on the ZIP's coordinates
-      let centerLat = userLat;
-      let centerLng = userLng;
-      try {
-        const zipCoords = await getCoordinatesFromAddress(zipcode);
-        centerLat = zipCoords.lat;
-        centerLng = zipCoords.lng;
-      } catch (_) {
-        // Fall back to user GPS coords if ZIP geocoding fails
-      }
-      if (centerLat && centerLng) {
-        const pipeline = [
-          {
-            $geoNear: {
-              near: { type: "Point", coordinates: [centerLng, centerLat] },
-              distanceField: "distanceMeters",
-              maxDistance: 160934, // 100 miles in meters
-              spherical: true,
-              query,
-            },
-          },
-          { $limit: 10 },
-        ];
-        events = await CuratedEvent.aggregate(pipeline);
-      } else {
-        events = await CuratedEvent.find(query).sort({ startTime: 1 }).limit(10).lean();
-      }
     } else if (userLat && userLng) {
       // No text filter — use GPS, cap at 100 miles, closest 10
       const pipeline = [
