@@ -167,11 +167,16 @@ module.exports.getEvents = async (req, res, next) => {
     }
 
     let events;
-    let centerLat = lat ? parseFloat(lat) : null;
-    let centerLng = lng ? parseFloat(lng) : null;
+    const userLat = lat ? parseFloat(lat) : null;
+    const userLng = lng ? parseFloat(lng) : null;
 
-    // ZIP is most precise — override center coordinates with ZIP's location
-    if (zipcode) {
+    if (city || state) {
+      // City/state search — return all matching events, no distance cap
+      events = await CuratedEvent.find(query).sort({ startTime: 1 }).lean();
+    } else if (zipcode) {
+      // ZIP search — center 100-mile cap on the ZIP's coordinates
+      let centerLat = userLat;
+      let centerLng = userLng;
       try {
         const zipCoords = await getCoordinatesFromAddress(zipcode);
         centerLat = zipCoords.lat;
@@ -179,15 +184,29 @@ module.exports.getEvents = async (req, res, next) => {
       } catch (_) {
         // Fall back to user GPS coords if ZIP geocoding fails
       }
-    }
-
-    if (centerLat && centerLng) {
-      // Use $geoNear in aggregate for filtering + distance in one pass
-      // Priority: ZIP coords > user GPS coords
+      if (centerLat && centerLng) {
+        const pipeline = [
+          {
+            $geoNear: {
+              near: { type: "Point", coordinates: [centerLng, centerLat] },
+              distanceField: "distanceMeters",
+              maxDistance: 160934, // 100 miles in meters
+              spherical: true,
+              query,
+            },
+          },
+          { $limit: 10 },
+        ];
+        events = await CuratedEvent.aggregate(pipeline);
+      } else {
+        events = await CuratedEvent.find(query).sort({ startTime: 1 }).limit(10).lean();
+      }
+    } else if (userLat && userLng) {
+      // No text filter — use GPS, cap at 100 miles, closest 10
       const pipeline = [
         {
           $geoNear: {
-            near: { type: "Point", coordinates: [centerLng, centerLat] },
+            near: { type: "Point", coordinates: [userLng, userLat] },
             distanceField: "distanceMeters",
             maxDistance: 160934, // 100 miles in meters
             spherical: true,
@@ -220,7 +239,7 @@ module.exports.getEvents = async (req, res, next) => {
     const result = events.map(event => {
       const eventLng = event.location.coordinates[0];
       const eventLat = event.location.coordinates[1];
-      const distanceKm = (centerLat && centerLng)
+      const distanceKm = event.distanceMeters != null
         ? (event.distanceMeters / 1000)
         : null;
       const presence = presenceMap[event._id?.toString()] || { men: 0, women: 0 };
