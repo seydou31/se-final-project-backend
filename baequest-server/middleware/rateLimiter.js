@@ -12,11 +12,12 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Check-in limiter — 10 check-ins per hour per IP
+// Check-in limiter — 10 check-ins per hour per user (must run after auth middleware)
 const checkinLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
   skip: skipInTest,
+  keyGenerator: (req) => req.user._id.toString(),
   message: { message: 'Check-in rate limit exceeded, please wait before trying again.' },
   standardHeaders: true,
   legacyHeaders: false,

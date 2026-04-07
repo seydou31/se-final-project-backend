@@ -13,7 +13,7 @@ router.get("/nearby", getNearbyEvents);
 // Protected routes - auth required
 router.get("/", auth, getEvents);
 router.post("/:id/going", auth, markAsGoing);
-router.post("/:id/checkin", checkinLimiter, auth, checkinAtEvent);
+router.post("/:id/checkin", auth, checkinLimiter, checkinAtEvent);
 router.post("/:id/checkout", auth, checkoutFromEvent);
 router.post("/:id/heartbeat", auth, heartbeat);
 router.get("/:id/users", auth, getUsersAtEvent);
