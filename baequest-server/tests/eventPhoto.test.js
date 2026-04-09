@@ -51,8 +51,13 @@ beforeAll(async () => {
   const io = new Server(server);
   app.set('io', io);
 
-  // Inject req.file to simulate multer file upload
-  app.post('/events', (req, res, next) => {
+  // Inject req.user and req.file to simulate authenticated event manager with Stripe connected
+  const injectManager = (req, res, next) => {
+    req.user = { _id: new mongoose.Types.ObjectId(), stripeOnboardingComplete: true, stripeAccountId: 'acct_test123' };
+    next();
+  };
+
+  app.post('/events', injectManager, (req, res, next) => {
     req.file = {
       buffer: Buffer.from('fake-image'),
       originalname: 'event.jpg',
@@ -62,7 +67,7 @@ beforeAll(async () => {
   }, curatedEventsController.createEvent);
 
   // Route without file — to confirm photo is optional
-  app.post('/events-no-photo', curatedEventsController.createEvent);
+  app.post('/events-no-photo', injectManager, curatedEventsController.createEvent);
 
   app.use((err, req, res, next) => {
     res.status(err.statusCode || 500).json({ message: err.message });

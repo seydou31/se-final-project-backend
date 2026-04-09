@@ -79,6 +79,8 @@ async function createEventManagerAndToken(email = 'manager@example.com') {
     password: await bcrypt.hash('TestPass1!', 10),
     role: 'eventManager',
     isEmailVerified: true,
+    stripeOnboardingComplete: true,
+    stripeAccountId: 'acct_test123',
   });
   const token = jwt.sign({ _id: userDoc._id, tokenVersion: userDoc.tokenVersion }, SECRET.JWT_SECRET);
   return { user: userDoc, token };
