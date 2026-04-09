@@ -291,6 +291,15 @@ module.exports.checkinAtEvent = async (req, res, next) => {
     const now = new Date();
     if (now > event.endTime) throw new BadRequestError("This event has already ended");
 
+    const twoHoursBefore = new Date(event.startTime.getTime() - 2 * 60 * 60 * 1000);
+    if (now < twoHoursBefore) {
+      const minutesUntilOpen = Math.ceil((twoHoursBefore - now) / 60000);
+      const hoursUntilOpen = Math.floor(minutesUntilOpen / 60);
+      const minsLeft = minutesUntilOpen % 60;
+      const timeStr = hoursUntilOpen > 0 ? `${hoursUntilOpen}h ${minsLeft}m` : `${minsLeft}m`;
+      throw new BadRequestError(`Check-in opens 2 hours before the event. Opens in ${timeStr}.`);
+    }
+
     // Validate event has stored coordinates
     const coords = event.location?.coordinates;
     if (!coords || coords.length < 2 || typeof coords[0] !== 'number' || typeof coords[1] !== 'number') {
