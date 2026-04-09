@@ -13,7 +13,7 @@ module.exports = async (req, res, next) => {
     return res.status(401).json({ message: 'Invalid authentication token' });
   }
 
-  const foundUser = await User.findById(payload._id).select('tokenVersion role');
+  const foundUser = await User.findById(payload._id).select('tokenVersion role stripeAccountId stripeOnboardingComplete');
   if (!foundUser || foundUser.tokenVersion !== payload.tokenVersion) {
     return res.status(401).json({ message: 'Session is no longer valid. Please log in again.' });
   }
@@ -22,6 +22,6 @@ module.exports = async (req, res, next) => {
     return res.status(403).json({ message: 'Access restricted to event managers' });
   }
 
-  req.user = payload;
+  req.user = { ...payload, stripeAccountId: foundUser.stripeAccountId, stripeOnboardingComplete: foundUser.stripeOnboardingComplete };
   return next();
 };
