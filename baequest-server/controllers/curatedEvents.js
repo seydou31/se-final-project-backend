@@ -306,34 +306,35 @@ module.exports.checkinAtEvent = async (req, res, next) => {
     const globalTicketPrice = parseInt(process.env.TICKET_PRICE || '0', 10);
     if (globalTicketPrice > 0 && event.createdBy) {
       const eventCreator = await user.findById(event.createdBy);
-      if (eventCreator?.stripeOnboardingComplete && eventCreator?.stripeAccountId) {
-        const stripe = getStripe();
-        const session = await stripe.checkout.sessions.create({
-          payment_method_types: ['card'],
-          line_items: [{
-            price_data: {
-              currency: 'usd',
-              product_data: { name: event.name },
-              unit_amount: globalTicketPrice,
-            },
-            quantity: 1,
-          }],
-          mode: 'payment',
-          success_url: `${FRONTEND_URL}/events?checkin_success=true&eventId=${id}`,
-          cancel_url: `${FRONTEND_URL}/events`,
-          payment_intent_data: {
-            application_fee_amount: Math.round(globalTicketPrice * 0.70), // BaeQuest keeps 70%
-            transfer_data: { destination: eventCreator.stripeAccountId }, // remaining 30% to manager
-          },
-          metadata: {
-            userId: userId.toString(),
-            eventId: id,
-            lat: lat.toString(),
-            lng: lng.toString(),
-          },
-        });
-        return res.json({ requiresPayment: true, checkoutUrl: session.url });
+      if (!eventCreator?.stripeOnboardingComplete || !eventCreator?.stripeAccountId) {
+        throw new BadRequestError('This event is not yet accepting payments. Please try again later.');
       }
+      const stripe = getStripe();
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [{
+          price_data: {
+            currency: 'usd',
+            product_data: { name: event.name },
+            unit_amount: globalTicketPrice,
+          },
+          quantity: 1,
+        }],
+        mode: 'payment',
+        success_url: `${FRONTEND_URL}/events?checkin_success=true&eventId=${id}`,
+        cancel_url: `${FRONTEND_URL}/events`,
+        payment_intent_data: {
+          application_fee_amount: Math.round(globalTicketPrice * 0.70), // BaeQuest keeps 70%
+          transfer_data: { destination: eventCreator.stripeAccountId }, // remaining 30% to manager
+        },
+        metadata: {
+          userId: userId.toString(),
+          eventId: id,
+          lat: lat.toString(),
+          lng: lng.toString(),
+        },
+      });
+      return res.json({ requiresPayment: true, checkoutUrl: session.url });
     }
 
     // If user is already checked into a different event, clear that presence first
