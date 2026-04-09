@@ -113,17 +113,8 @@ app.use('/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve uploaded images only to authenticated users
-app.use('/uploads', (req, res, next) => {
-  const token = req.cookies.jwt;
-  if (!token) return res.status(401).json({ message: 'Not authorized' });
-  try {
-    jwt.verify(token, SECRET.JWT_SECRET);
-    return next();
-  } catch {
-    return res.status(401).json({ message: 'Not authorized' });
-  }
-}, express.static('uploads'));
+// Serve uploaded images publicly (event photos and profile pictures are shown to all users)
+app.use('/uploads', express.static('uploads'));
 
 app.use("/", mainRoute);
 
