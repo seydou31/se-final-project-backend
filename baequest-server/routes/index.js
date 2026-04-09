@@ -48,6 +48,11 @@ const eventManagerRouter = require('./eventManagers');
 
 router.use('/event-managers', eventManagerRouter);
 
+// Admin routes
+const adminRouter = require('./admin');
+
+router.use('/admin', adminRouter);
+
 // Stripe webhook (raw body handled in app.js before express.json)
 const { stripeWebhook } = require('../controllers/stripeWebhook');
 
