@@ -93,4 +93,38 @@ curatedEventSchema.index({ startTime: 1, endTime: 1 });
 curatedEventSchema.index({ state: 1, city: 1 });
 curatedEventSchema.index({ zipcode: 1 });
 
+/**
+ * =========================================
+ * EVENT MANAGER DASHBOARD
+ * =========================================
+ */
+
+curatedEventSchema.index({
+  createdBy: 1,
+  createdAt: -1,
+});
+
+/**
+ * =========================================
+ * EVENT SORTING
+ * =========================================
+ */
+
+curatedEventSchema.index({
+  startTime: 1,
+});
+
+/**
+ * =========================================
+ * OPTIONAL:
+ * FAST ACTIVE EVENT FILTERS
+ * =========================================
+ */
+
+curatedEventSchema.index({
+  city: 1,
+  startTime: 1,
+  endTime: 1,
+});
+
 module.exports = mongoose.model("CuratedEvent", curatedEventSchema);

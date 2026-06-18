@@ -1,7 +1,12 @@
-const { Resend } = require('resend');
+const nodemailer = require("nodemailer");
 
-// Initialize Resend with API key from environment
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.GMAIL_EMAIL,
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+});
 
 /**
  * Send password reset email
@@ -10,11 +15,11 @@ const resend = new Resend(process.env.RESEND_API_KEY);
  */
 const sendPasswordResetEmail = async (email, resetUrl) => {
   try {
-    if (!resend) {
+    if (!transporter) {
       console.log('📧 Email skipped (no API key)');
       return;
     }
-    await resend.emails.send({
+    await transporter.sendMail({
       from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
       to: email,
       subject: 'Reset Your BaeQuest Password',
@@ -104,11 +109,11 @@ const sendPasswordResetEmail = async (email, resetUrl) => {
  */
 const sendVerificationEmail = async (email, verificationUrl) => {
   try {
-    if (!resend) {
+    if (!transporter) {
       console.log('📧 Email skipped (no API key)');
       return;
     }
-    await resend.emails.send({
+    await transporter.sendMail({
       from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
       to: email,
       subject: 'Verify Your BaeQuest Email',
@@ -199,11 +204,11 @@ const sendVerificationEmail = async (email, verificationUrl) => {
  */
 const sendFeedbackRequestEmail = async (email, feedbackUrl, eventDetails) => {
   try {
-    if (!resend) {
+    if (!transporter) {
       console.log('📧 Email skipped (no API key)');
       return;
     }
-    await resend.emails.send({
+    await transporter.sendMail({
       from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
       to: email,
       subject: `How was your BaeQuest experience at ${eventDetails.name}?`,
@@ -368,7 +373,7 @@ const sendWelcomeEmail = async (email) => {
       console.log('📧 Email skipped (no API key)');
       return;
     }
-    await resend.emails.send({
+    await transporter.sendMail({
       from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
       to: email,
       subject: 'Welcome to BaeQuest! Let the adventure begin 💕',

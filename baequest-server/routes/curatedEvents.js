@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const { createEvent, getNearbyEvents, getEvents, markAsGoing, checkinAtEvent, checkoutFromEvent, getUsersAtEvent, heartbeat } = require("../controllers/curatedEvents");
+const { createEvent, getNearbyEvents, getEvents, markAsGoing, checkinAtEvent, checkoutFromEvent, getUsersAtEvent, heartbeat, getCheckinStatus } = require("../controllers/curatedEvents");
 const auth = require("../middleware/auth");
 const authEventManager = require("../middleware/authEventManager");
 const { checkinLimiter } = require("../middleware/rateLimiter");
@@ -17,5 +17,6 @@ router.post("/:id/checkin", auth, checkinLimiter, checkinAtEvent);
 router.post("/:id/checkout", auth, checkoutFromEvent);
 router.post("/:id/heartbeat", auth, heartbeat);
 router.get("/:id/users", auth, getUsersAtEvent);
+router.get("/:id/checkin-status", auth, getCheckinStatus);
 
 module.exports = router;

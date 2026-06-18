@@ -2,34 +2,16 @@ const Stripe = require('stripe');
 const CuratedEvent = require('../models/curatedEvent');
 const profile = require('../models/profile');
 const logger = require('../utils/logger');
+const { completeEventCheckin } = require('../services/eventCheckinService');
 
 const getStripe = () => Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Shared checkin completion logic (used by webhook after payment)
-// Note: checkedInUsers is already updated atomically before calling this function
-async function performCheckin(userId, eventId, lat, lng, io) {
-  const currentUserProfile = await profile.findOneAndUpdate(
-    { owner: userId },
-    { location: { eventId, lat, lng, updatedAt: new Date() } },
-    { new: true }
-  );
-
-  if (!currentUserProfile) return;
-
-  if (io) {
-    io.to(`event_${eventId}`).emit('user-checked-in', {
-      user: currentUserProfile,
-      eventId,
-    });
-  }
-}
-
 module.exports.stripeWebhook = async (req, res) => {
   const sig = req.headers['stripe-signature'];
-  let event;
+  let stripeEvent;
 
   try {
-    event = getStripe().webhooks.constructEvent(
+    stripeEvent = getStripe().webhooks.constructEvent(
       req.body,
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
@@ -39,31 +21,125 @@ module.exports.stripeWebhook = async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const { userId, eventId, lat, lng } = session.metadata;
+   try {
+    switch (stripeEvent.type) {
+      case "checkout.session.completed": {
+        const session =
+          stripeEvent.data.object;
 
-    try {
-      const io = req.app.get('io');
+        const {
+          userId,
+          eventId,
+          lat,
+          lng,
+        } = session.metadata || {};
 
-      // Idempotency: use findOneAndUpdate to atomically add user and detect if already present
-      const updated = await CuratedEvent.findOneAndUpdate(
-        { _id: eventId, checkedInUsers: { $ne: userId } },
-        { $addToSet: { checkedInUsers: userId }, $inc: { paidCheckinCount: 1 } },
-        { new: false }
-      );
+        if (
+          !userId ||
+          !eventId
+        ) {
+          logger.warn(
+            "Missing metadata in checkout session"
+          );
+          break;
+        }
 
-      if (updated) {
-        // User was not already checked in — complete the checkin
-        await performCheckin(userId, eventId, parseFloat(lat), parseFloat(lng), io);
-        logger.info(`Webhook: checked in user ${userId} at event ${eventId} after payment`);
-      } else {
-        logger.info(`Webhook: user ${userId} already checked in at event ${eventId}, skipping duplicate`);
+        const io =
+          req.app.get("io");
+
+        const eventDoc =
+          await CuratedEvent.findById(
+            eventId
+          );
+
+        if (!eventDoc) {
+          logger.error(
+            `Event not found: ${eventId}`
+          );
+          break;
+        }
+
+        console.log("WEBHOOK START");
+
+        console.log("checkedInUsers:", eventDoc.checkedInUsers);
+        console.log("userId:", userId);
+
+        // Prevent duplicate webhook processing
+       const alreadyCheckedIn =
+          eventDoc.checkedInUsers?.some(
+            (id) => String(id) === String(userId)
+          );
+
+        console.log("alreadyCheckedIn:", alreadyCheckedIn);
+
+        if (alreadyCheckedIn) {
+          logger.info(
+            `User ${userId} already checked in for event ${eventId}`
+          );
+          break;
+        }
+
+        const result =
+          await completeEventCheckin({
+            userId,
+            event: eventDoc,
+            lat:
+              Number(lat) || 0,
+            lng:
+              Number(lng) || 0,
+            io,
+          });
+
+        // Update event only AFTER successful check-in
+        await CuratedEvent.updateOne(
+          {
+            _id: eventId,
+          },
+          {
+            $addToSet: {
+              checkedInUsers:
+                userId,
+            },
+            $inc: {
+              paidCheckinCount: 1,
+            },
+          }
+        );
+
+        logger.info(
+          `Paid check-in completed. User: ${userId}, Event: ${eventId}`
+        );
+
+        console.log(
+          "Paid check-in result:",
+          {
+            userId,
+            eventId,
+            users:
+              result
+                ?.compatibleUsers
+                ?.length || 0,
+          }
+        );
+
+        break;
       }
-    } catch (err) {
-      logger.error('Webhook checkin failed:', err);
-    }
-  }
 
-  return res.json({ received: true });
+      default:
+        break;
+    }
+
+    return res.json({
+      received: true,
+    });
+  } catch (err) {
+    logger.error(
+      "Stripe webhook processing failed:",
+      err
+    );
+
+    return res.json({
+      received: true,
+    });
+  }
 };
