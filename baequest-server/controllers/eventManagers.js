@@ -42,6 +42,22 @@ module.exports.register = async (req, res, next) => {
   }
 
   try {
+    const normalizedEmail =
+      email.toLowerCase().trim();
+
+    // Check before create
+    const existingUser =
+      await User.findOne({
+        email: normalizedEmail,
+      }).select("_id");
+
+    if (existingUser) {
+      return res.status(409).json({
+        message:
+          "An account with this email already exists",
+      });
+    }
+    
     const hash = await bcrypt.hash(password, 10);
     const newUser = await User.create({ email, password: hash, name, role: 'eventManager', isEmailVerified: false });
 
@@ -61,6 +77,7 @@ module.exports.register = async (req, res, next) => {
     return res.status(201).json({ message: 'Account created. Please check your email to verify your account.' });
   } catch (err) {
     if (err.code === 11000) {
+      console.log('Duplicate email registration attempt:', err);
       return res.status(409).json({ message: 'An account with this email already exists' });
     }
     return next(err);
@@ -187,6 +204,200 @@ module.exports.verifyStripeOnboarding = async (req, res, next) => {
     return res.json({ onboardingComplete: user.stripeOnboardingComplete });
   } catch (err) {
     logger.error('Stripe verify error:', err);
+    return next(err);
+  }
+};
+
+module.exports.getEvents = async (req, res, next) => {
+  try {
+    const page = Math.max(parseInt(req.query.page || '1', 10), 1);
+    const limit = Math.max(parseInt(req.query.limit || '10', 10), 1);
+    const skip = (page - 1) * limit;
+
+    const search = (req.query.search || '').trim();
+
+    const query = {
+      createdBy: req.user._id,
+    };
+
+    // Search by event name
+    if (search) {
+      query.name = {
+        $regex: search,
+        $options: 'i',
+      };
+    }
+
+    // Total count
+    const total = await CuratedEvent.countDocuments(query);
+
+    // Events
+    const events = await CuratedEvent.find(query)
+      .select(`
+        name
+        startTime
+        endTime
+        address
+        city
+        state
+        photo
+        image
+        checkedInUsers
+        paidCheckinCount
+        status
+      `)
+      .sort({ startTime: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const price = ticketPriceDollars();
+
+    const formatted = events.map((event) => ({
+      _id: event._id,
+      name: event.name,
+      startTime: event.startTime,
+      endTime: event.endTime,
+      address: event.address,
+      city: event.city,
+      state: event.state,
+      photo: event.photo,
+      image: event.image,
+      status: event.status,
+      checkinCount: event.checkedInUsers?.length || 0,
+      earnings: Number(
+        ((event.paidCheckinCount || 0) * price * MANAGER_SHARE).toFixed(2)
+      ),
+    }));
+
+    return res.json({
+      data: formatted,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+module.exports.getDashboardStats = async (req, res, next) => {
+  try {
+    const price = ticketPriceDollars();
+
+    const events = await CuratedEvent.find({
+      createdBy: req.user._id,
+    })
+      .select('checkedInUsers paidCheckinCount')
+      .lean();
+
+    const totalEvents = events.length;
+
+    const totalCheckins = events.reduce(
+      (sum, e) => sum + (e.checkedInUsers?.length || 0),
+      0
+    );
+
+    const totalPaidCheckins = events.reduce(
+      (sum, e) => sum + (e.paidCheckinCount || 0),
+      0
+    );
+
+    const totalEarnings = Number(
+      (totalPaidCheckins * price * MANAGER_SHARE).toFixed(2)
+    );
+
+    return res.json({
+      totalEvents,
+      totalCheckins,
+      totalEarnings,
+      ticketPrice: price,
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+module.exports.logout = async (req, res, next) => {
+  try {
+    res.clearCookie('jwt', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+    });
+
+    return res.json({
+      message: 'Logged out successfully',
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+module.exports.getEventById = async (req, res, next) => {
+  try {
+    const event = await CuratedEvent.findOne({
+      _id: req.params.id,
+      createdBy: req.user._id,
+    }).lean();
+
+    if (!event) {
+      return res.status(404).json({
+        message: 'Event not found',
+      });
+    }
+
+    return res.json(event);
+  } catch (err) {
+    return next(err);
+  }
+};
+
+module.exports.updateEvent = async (req, res, next) => {
+  try {
+    const updated = await CuratedEvent.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        createdBy: req.user._id,
+      },
+      req.body,
+      {
+        new: true,
+      }
+    );
+
+    if (!updated) {
+      return res.status(404).json({
+        message: 'Event not found',
+      });
+    }
+
+    return res.json(updated);
+  } catch (err) {
+    return next(err);
+  }
+};
+
+module.exports.deleteEvent = async (req, res, next) => {
+  try {
+    const deleted = await CuratedEvent.findOneAndDelete({
+      _id: req.params.id,
+      createdBy: req.user._id,
+    });
+
+    if (!deleted) {
+      return res.status(404).json({
+        message: 'Event not found',
+      });
+    }
+
+    return res.json({
+      message: 'Event deleted successfully',
+    });
+  } catch (err) {
     return next(err);
   }
 };
