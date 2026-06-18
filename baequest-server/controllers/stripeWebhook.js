@@ -1,6 +1,5 @@
 const Stripe = require('stripe');
 const CuratedEvent = require('../models/curatedEvent');
-const profile = require('../models/profile');
 const logger = require('../utils/logger');
 const { completeEventCheckin } = require('../services/eventCheckinService');
 

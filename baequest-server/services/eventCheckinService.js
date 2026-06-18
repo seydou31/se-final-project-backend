@@ -1,5 +1,4 @@
 const profile = require("../models/profile");
-const CuratedEvent = require("../models/curatedEvent");
 const { NotFoundError } = require("../utils/errors");
 
 async function completeEventCheckin({

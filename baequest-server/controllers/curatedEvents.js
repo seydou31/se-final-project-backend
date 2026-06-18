@@ -461,7 +461,7 @@ module.exports.getEvents = async (
       .status(200)
       .json(result);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -483,9 +483,9 @@ module.exports.markAsGoing = async (req, res, next) => {
     }
     await event.save();
 
-    res.status(200).json({ isGoing: !isGoing, goingCount: event.usersGoing.length });
+    return res.status(200).json({ isGoing: !isGoing, goingCount: event.usersGoing.length });
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -535,20 +535,15 @@ module.exports.checkinAtEvent = async (req, res, next) => {
       // User already paid before for this event
       const alreadyPaid =
         event.checkedInUsers?.some(
-          (id) =>
-            String(id) ===
-            String(userId)
+          (checkedInUserId) =>
+            String(checkedInUserId) === String(userId)
         );
 
       if (alreadyPaid) {
         const io =
           req.app.get("io");
 
-        const {
-          currentUserProfile,
-          compatibleUsers,
-        } =
-          await completeEventCheckin({
+        const { compatibleUsers } = await completeEventCheckin({
             userId,
             event,
             lat,
@@ -628,17 +623,9 @@ module.exports.checkinAtEvent = async (req, res, next) => {
         io,
       });
 
-    res.status(200).json({
-      message:
-        "Checked in successfully",
-
-      users: compatibleUsers,
-    });
-
     // ============================================
     // SMS BACKGROUND TASK
     // ============================================
-
     process.nextTick(async () => {
       try {
         const smsTargets =
@@ -663,6 +650,7 @@ module.exports.checkinAtEvent = async (req, res, next) => {
               logger.warn(
                 "SMS decrypt failed"
               );
+              return null;
             }
           })
         );
@@ -677,8 +665,15 @@ module.exports.checkinAtEvent = async (req, res, next) => {
     logger.info(
       `User ${userId} checked in at event ${id}`
     );
+
+    return res.status(200).json({
+      message:
+        "Checked in successfully",
+
+      users: compatibleUsers,
+    });
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 

@@ -62,10 +62,12 @@ io.use((socket, next) => {
   const cookieHeader = socket.handshake.headers.cookie || '';
   const jwtMatch = cookieHeader.split(';').find(c => c.trim().startsWith('jwt='));
   const token = jwtMatch ? jwtMatch.trim().slice(4) : null;
-  if (!token) return next(new Error('Authentication required'));
+  if (!token) {
+    return next(new Error('Authentication required'));
+  }
   try {
     // eslint-disable-next-line no-param-reassign
-    socket.user = jwt.verify(token, SECRET.JWT_SECRET);
+    socket.data.user = jwt.verify(token, SECRET.JWT_SECRET);
     return next();
   } catch {
     return next(new Error('Invalid token'));
@@ -85,7 +87,9 @@ io.on("connection", (socket) => {
     const error = { code, message };
 
     // ACK response
-    callback?.({ status: "error", ...error });
+    if (callback) {
+      callback({ status: "error", ...error });
+    }
 
     // ALSO emit for global listener (frontend)
     socket.emit("error", error);
@@ -94,7 +98,8 @@ io.on("connection", (socket) => {
   // =============================
   // JOIN EVENT
   // =============================
-  socket.on("join-event", ({ eventId } = {}, callback) => {
+  socket.on("join-event", (payload, callback) => {
+  const { eventId } = payload || {};
     try {
       if (!eventId) {
         return sendError("INVALID_EVENT_ID", "eventId is required", callback);
@@ -107,25 +112,32 @@ io.on("connection", (socket) => {
         logger.info(`${socket.id} joined ${room}`);
       }
 
+      /* eslint-disable no-param-reassign */
       socket.data.eventId = eventId;
+      /* eslint-enable no-param-reassign */
 
-      callback?.({ status: "ok", eventId });
+      if (callback) {
+        callback({ status: "ok", eventId });
+      }
 
       socket.to(room).emit("user-joined", {
         socketId: socket.id,
         eventId,
       });
 
+      return null;
+
     } catch (err) {
       logger.error(`join-event error: ${err.message}`);
-      sendError("JOIN_FAILED", "Failed to join event", callback);
+      return sendError("JOIN_FAILED", "Failed to join event", callback);
     }
   });
 
   // =============================
   // LEAVE EVENT
   // =============================
-  socket.on("leave-event", ({ eventId } = {}, callback) => {
+  socket.on("leave-event", (payload, callback) => {
+  const { eventId } = payload || {};
     try {
       if (!eventId) {
         return sendError("INVALID_EVENT_ID", "eventId is required", callback);
@@ -143,13 +155,18 @@ io.on("connection", (socket) => {
         eventId,
       });
 
+      /* eslint-disable no-param-reassign */
       socket.data.eventId = null;
+      /* eslint-enable no-param-reassign */
 
-      callback?.({ status: "ok", eventId });
+      if (callback) {
+        callback({ status: "ok", eventId });
+      }
+      return null;
 
     } catch (err) {
       logger.error(`leave-event error: ${err.message}`);
-      sendError("LEAVE_FAILED", "Failed to leave event", callback);
+      return sendError("LEAVE_FAILED", "Failed to leave event", callback);
     }
   });
 
@@ -158,18 +175,18 @@ io.on("connection", (socket) => {
   // =============================
   socket.on("disconnecting", () => {
     try {
-      for (const room of socket.rooms) {
-        if (room === socket.id) continue;
+      [...socket.rooms]
+        .filter((room) => room !== socket.id)
+        .forEach((room) => {
+          const eventId = room.replace("event_", "");
 
-        const eventId = room.replace("event_", "");
+          logger.info(`${socket.id} leaving ${room}`);
 
-        logger.info(`${socket.id} leaving ${room}`);
-
-        socket.to(room).emit("user-left", {
-          socketId: socket.id,
-          eventId,
+          socket.to(room).emit("user-left", {
+            socketId: socket.id,
+            eventId,
+          });
         });
-      }
     } catch (err) {
       logger.error(`disconnecting error: ${err.message}`);
     }
@@ -256,14 +273,16 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
+  origin(origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
 
     if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+      return callback(null, true);
     }
+
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true
 }));
@@ -294,13 +313,11 @@ app.use(express.urlencoded({
 // app.use('/uploads', express.static('uploads'));
 // Fix for image loading (CORP issue)
 app.use('/uploads', (req, res, next) => {
-  //res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
 }, express.static(path.join(__dirname, 'uploads')));
 
 // Google login fix for CORP issue when Google tries to load profile picture
 app.use('/google-profile-pictures', (req, res, next) => {
-  //res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
 }, express.static(path.join(__dirname, 'google-profile-pictures')));
 

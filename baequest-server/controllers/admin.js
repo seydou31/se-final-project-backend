@@ -170,7 +170,7 @@ module.exports.getAdminOverview = async (req, res, next) => {
     });
   } catch (err) {
     logger.error('Get admin managers error:', err);
-    next(err);
+    return next(err);
   }
 };
 
@@ -183,12 +183,16 @@ module.exports.getAdminManagerEvents = async (req, res, next) => {
   try {
     const { managerId } = req.params;
 
-    const page = parseInt(req.query.page || '1', 10);
-    const limit = parseInt(req.query.limit || '10', 10);
+    const {
+      page: pageQuery = '1',
+      limit: limitQuery = '10',
+      search = '',
+      dateFrom,
+      dateTo,
+    } = req.query;
 
-    const search = req.query.search || '';
-    const dateFrom = req.query.dateFrom;
-    const dateTo = req.query.dateTo;
+    const page = parseInt(pageQuery, 10);
+    const limit = parseInt(limitQuery, 10);
 
     const skip = (page - 1) * limit;
 
@@ -262,6 +266,6 @@ module.exports.getAdminManagerEvents = async (req, res, next) => {
     });
   } catch (err) {
     logger.error('Get manager events error:', err);
-    next(err);
+    return next(err);
   }
 };

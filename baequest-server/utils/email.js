@@ -350,7 +350,6 @@ const sendFeedbackRequestEmail = async (email, feedbackUrl, eventDetails) => {
       `,
     });
 
-    return true;
   } catch (error) {
     console.error('Failed to send feedback email:', error);
     throw new Error('Failed to send feedback request email');
