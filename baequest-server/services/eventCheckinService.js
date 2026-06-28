@@ -1,5 +1,8 @@
 const profile = require("../models/profile");
 const { NotFoundError } = require("../utils/errors");
+const { sendCheckinNotification } = require("../utils/sms");
+const { decryptPhone } = require("../utils/crypto");
+const logger = require("../utils/logger");
 
 async function completeEventCheckin({
   userId,
@@ -111,7 +114,7 @@ async function completeEventCheckin({
       ...genderFilter,
     })
     .select(
-      "name age gender profession bio interests convoStarter profilePicture sexualOrientation owner"
+      "name age gender profession bio interests convoStarter profilePicture sexualOrientation owner phoneNumber"
     )
     .lean();
 
@@ -158,6 +161,29 @@ async function completeEventCheckin({
   };
 }
 
+function notifyCompatibleUsers({ compatibleUsers, currentUserProfile, event }) {
+  process.nextTick(async () => {
+    try {
+      const smsTargets = compatibleUsers.filter((u) => u.phoneNumber);
+
+      await Promise.allSettled(
+        smsTargets.map(async (u) => {
+          try {
+            const phone = decryptPhone(u.phoneNumber);
+            return sendCheckinNotification(phone, currentUserProfile.name, event.name);
+          } catch (err) {
+            logger.warn("SMS decrypt failed");
+            return null;
+          }
+        })
+      );
+    } catch (err) {
+      logger.error("SMS notification failed", err);
+    }
+  });
+}
+
 module.exports = {
   completeEventCheckin,
+  notifyCompatibleUsers,
 };

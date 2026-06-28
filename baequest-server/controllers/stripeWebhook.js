@@ -1,7 +1,7 @@
 const Stripe = require('stripe');
 const CuratedEvent = require('../models/curatedEvent');
 const logger = require('../utils/logger');
-const { completeEventCheckin } = require('../services/eventCheckinService');
+const { completeEventCheckin, notifyCompatibleUsers } = require('../services/eventCheckinService');
 
 const getStripe = () => Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -104,6 +104,12 @@ module.exports.stripeWebhook = async (req, res) => {
             },
           }
         );
+
+        notifyCompatibleUsers({
+          compatibleUsers: result.compatibleUsers,
+          currentUserProfile: result.currentUserProfile,
+          event: eventDoc,
+        });
 
         logger.info(
           `Paid check-in completed. User: ${userId}, Event: ${eventId}`

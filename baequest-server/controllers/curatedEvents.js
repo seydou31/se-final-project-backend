@@ -9,12 +9,10 @@ const user = require("../models/user");
 const EventFeedback = require("../models/eventFeedback");
 const { BadRequestError, NotFoundError } = require("../utils/customErrors");
 const { sendFeedbackRequestEmail } = require("../utils/email");
-const { sendCheckinNotification } = require("../utils/sms");
-const { decryptPhone } = require("../utils/crypto");
 const logger = require("../utils/logger");
 const { isS3Configured } = require("../middleware/multer");
 const { scheduleAutoCheckout } = require("../utils/checkoutScheduler");
-const { completeEventCheckin } = require("../services/eventCheckinService");
+const { completeEventCheckin, notifyCompatibleUsers } = require("../services/eventCheckinService");
 
 const getStripe = () => Stripe(process.env.STRIPE_SECRET_KEY);
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://baequests.com";
@@ -543,13 +541,15 @@ module.exports.checkinAtEvent = async (req, res, next) => {
         const io =
           req.app.get("io");
 
-        const { compatibleUsers } = await completeEventCheckin({
+        const { compatibleUsers, currentUserProfile } = await completeEventCheckin({
             userId,
             event,
             lat,
             lng,
             io,
           });
+
+        notifyCompatibleUsers({ compatibleUsers, currentUserProfile, event });
 
         return res.status(200).json({
           message:
@@ -623,44 +623,7 @@ module.exports.checkinAtEvent = async (req, res, next) => {
         io,
       });
 
-    // ============================================
-    // SMS BACKGROUND TASK
-    // ============================================
-    process.nextTick(async () => {
-      try {
-        const smsTargets =
-          compatibleUsers.filter(
-            (u) => u.phoneNumber
-          );
-
-        await Promise.allSettled(
-          smsTargets.map(async (u) => {
-            try {
-              const phone =
-                decryptPhone(
-                  u.phoneNumber
-                );
-              console.log("send notification");
-              return sendCheckinNotification(
-                phone,
-                currentUserProfile.name,
-                event.name
-              );
-            } catch (err) {
-              logger.warn(
-                "SMS decrypt failed"
-              );
-              return null;
-            }
-          })
-        );
-      } catch (err) {
-        logger.error(
-          "SMS notification failed",
-          err
-        );
-      }
-    });
+    notifyCompatibleUsers({ compatibleUsers, currentUserProfile, event });
 
     logger.info(
       `User ${userId} checked in at event ${id}`
