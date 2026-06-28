@@ -234,6 +234,7 @@ module.exports.getEvents = async (
       startTime: 1,
       endTime: 1,
       usersGoing: 1,
+      ticketPrice: 1,
     };
 
     let events = [];
@@ -374,12 +375,6 @@ module.exports.getEvents = async (
         ])
       );
 
-    const ticketPrice = parseInt(
-      process.env.TICKET_PRICE ||
-        "0",
-      10
-    );
-
     const result = events.map(
       (event) => {
         const presenceData =
@@ -430,7 +425,7 @@ module.exports.getEvents = async (
             event.usersGoing
               ?.length || 0,
 
-          ticketPrice,
+          ticketPrice: event.ticketPrice || 0,
 
           liveMen:
             presenceData.men,
