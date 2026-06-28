@@ -11,9 +11,11 @@ const { sendVerificationEmail } = require('../utils/email');
 
 const getStripe = () => Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Ticket price in dollars (env var is in cents, e.g. TICKET_PRICE=500 → $5.00)
-const ticketPriceDollars = () => parseInt(process.env.TICKET_PRICE || '0', 10) / 100;
 const MANAGER_SHARE = 0.30;
+
+// Earnings for one event: paid check-ins * that event's own ticket price (stored in cents)
+const eventEarnings = (event) =>
+  ((event.paidCheckinCount || 0) * (event.ticketPrice || 0)) / 100 * MANAGER_SHARE;
 
 const COOKIE_OPTIONS = {
   maxAge: 3600000 * 24 * 7,
@@ -135,10 +137,8 @@ module.exports.getMe = async (req, res, next) => {
 module.exports.getDashboard = async (req, res, next) => {
   try {
     const events = await CuratedEvent.find({ createdBy: req.user._id })
-      .select('name startTime endTime checkedInUsers paidCheckinCount')
+      .select('name startTime endTime checkedInUsers paidCheckinCount ticketPrice')
       .lean();
-
-    const price = ticketPriceDollars();
 
     const eventStats = events.map((event) => ({
       _id: event._id,
@@ -146,7 +146,7 @@ module.exports.getDashboard = async (req, res, next) => {
       startTime: event.startTime,
       endTime: event.endTime,
       checkinCount: event.checkedInUsers?.length || 0,
-      earnings: ((event.paidCheckinCount || 0) * price * MANAGER_SHARE).toFixed(2),
+      earnings: eventEarnings(event).toFixed(2),
     }));
 
     const totalCheckins = eventStats.reduce((sum, e) => sum + e.checkinCount, 0);
@@ -156,7 +156,6 @@ module.exports.getDashboard = async (req, res, next) => {
       events: eventStats,
       totalCheckins,
       totalEarnings,
-      ticketPrice: price,
     });
   } catch (err) {
     return next(err);
@@ -244,14 +243,13 @@ module.exports.getEvents = async (req, res, next) => {
         image
         checkedInUsers
         paidCheckinCount
+        ticketPrice
         status
       `)
       .sort({ startTime: -1 })
       .skip(skip)
       .limit(limit)
       .lean();
-
-    const price = ticketPriceDollars();
 
     const formatted = events.map((event) => ({
       _id: event._id,
@@ -265,9 +263,7 @@ module.exports.getEvents = async (req, res, next) => {
       image: event.image,
       status: event.status,
       checkinCount: event.checkedInUsers?.length || 0,
-      earnings: Number(
-        ((event.paidCheckinCount || 0) * price * MANAGER_SHARE).toFixed(2)
-      ),
+      earnings: Number(eventEarnings(event).toFixed(2)),
     }));
 
     return res.json({
@@ -286,12 +282,10 @@ module.exports.getEvents = async (req, res, next) => {
 
 module.exports.getDashboardStats = async (req, res, next) => {
   try {
-    const price = ticketPriceDollars();
-
     const events = await CuratedEvent.find({
       createdBy: req.user._id,
     })
-      .select('checkedInUsers paidCheckinCount')
+      .select('checkedInUsers paidCheckinCount ticketPrice')
       .lean();
 
     const totalEvents = events.length;
@@ -307,14 +301,14 @@ module.exports.getDashboardStats = async (req, res, next) => {
     );
 
     const totalEarnings = Number(
-      (totalPaidCheckins * price * MANAGER_SHARE).toFixed(2)
+      events.reduce((sum, e) => sum + eventEarnings(e), 0).toFixed(2)
     );
 
     return res.json({
       totalEvents,
       totalCheckins,
+      totalPaidCheckins,
       totalEarnings,
-      ticketPrice: price,
     });
   } catch (err) {
     return next(err);

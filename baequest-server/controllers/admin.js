@@ -2,9 +2,6 @@ const User = require('../models/user');
 const CuratedEvent = require('../models/curatedEvent');
 const logger = require('../utils/logger');
 
-const ticketPriceDollars = () =>
-  parseInt(process.env.TICKET_PRICE || '0', 10) / 100;
-
 const MANAGER_SHARE = 0.30;
 
 /**
@@ -74,8 +71,11 @@ module.exports.getAdminOverview = async (req, res, next) => {
             $sum: 1,
           },
 
-          totalPaidCheckins: {
-            $sum: '$paidCheckinCount',
+          // Earnings in cents: each event's own paid check-ins * its own ticket price
+          totalEarningsCents: {
+            $sum: {
+              $multiply: ['$paidCheckinCount', '$ticketPrice'],
+            },
           },
         },
       },
@@ -88,8 +88,7 @@ module.exports.getAdminOverview = async (req, res, next) => {
         totalEvents: stat.totalEvents,
 
         totalEarnings:
-          (stat.totalPaidCheckins || 0) *
-          ticketPriceDollars() *
+          (stat.totalEarningsCents || 0) / 100 *
           MANAGER_SHARE,
       };
     });
@@ -134,19 +133,17 @@ module.exports.getAdminOverview = async (req, res, next) => {
         $group: {
           _id: null,
 
-          totalPaidCheckins: {
-            $sum: '$paidCheckinCount',
+          totalEarningsCents: {
+            $sum: {
+              $multiply: ['$paidCheckinCount', '$ticketPrice'],
+            },
           },
         },
       },
     ]);
 
-    const totalPaidCheckins =
-      earningsResult[0]?.totalPaidCheckins || 0;
-
     const totalEarnings =
-      totalPaidCheckins *
-      ticketPriceDollars() *
+      (earningsResult[0]?.totalEarningsCents || 0) / 100 *
       MANAGER_SHARE;
 
     return res.status(200).json({
@@ -234,7 +231,7 @@ module.exports.getAdminManagerEvents = async (req, res, next) => {
     const data = events.map((event) => {
       const earnings =
         (event.paidCheckinCount || 0) *
-        ticketPriceDollars() *
+        ((event.ticketPrice || 0) / 100) *
         MANAGER_SHARE;
 
       return {

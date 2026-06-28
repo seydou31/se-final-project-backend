@@ -86,9 +86,12 @@ module.exports.createEvent = async (req, res, next) => {
   const { name, address, city, state, zipcode, lat, lng, startTime, endTime, description, link, ticketPrice } = req.body;
 
   try {
-    // Block event creation if manager hasn't connected Stripe
-    if (!req.user.stripeOnboardingComplete || !req.user.stripeAccountId) {
-      throw new BadRequestError("You must connect your Stripe account before creating events.");
+    // ticketPrice is validated upstream (createEventSchema) as a non-negative integer number of cents
+    const ticketPriceCents = ticketPrice != null ? ticketPrice : 0;
+
+    // Only paid events require a connected Stripe account to receive payouts
+    if (ticketPriceCents > 0 && (!req.user.stripeOnboardingComplete || !req.user.stripeAccountId)) {
+      throw new BadRequestError("You must connect your Stripe account before creating a paid event.");
     }
 
     // Validate required fields
@@ -136,7 +139,7 @@ module.exports.createEvent = async (req, res, next) => {
       },
       startTime: start,
       endTime: end,
-      ...(ticketPrice != null && { ticketPrice: Math.round(parseFloat(ticketPrice) * 100) }),
+      ticketPrice: ticketPriceCents,
       ...(req.user?._id && { createdBy: req.user._id }),
     });
 
@@ -527,9 +530,9 @@ module.exports.checkinAtEvent = async (req, res, next) => {
       throw new BadRequestError(`You must be within 0.5 miles of the event to check in. You are ${distanceMiles} miles away.`);
     }
 
-    // If a global ticket price is set, redirect to Stripe Checkout
-    const globalTicketPrice = parseInt(process.env.TICKET_PRICE || '0', 10);
-    if (globalTicketPrice > 0 && event.createdBy) {
+    // If this event has a ticket price, redirect to Stripe Checkout
+    const eventTicketPrice = event.ticketPrice || 0;
+    if (eventTicketPrice > 0 && event.createdBy) {
       // User already paid before for this event
       const alreadyPaid =
         event.checkedInUsers?.some(
@@ -572,7 +575,7 @@ module.exports.checkinAtEvent = async (req, res, next) => {
             price_data: {
               currency: 'usd',
               product_data: { name: event.name },
-              unit_amount: globalTicketPrice,
+              unit_amount: eventTicketPrice,
             },
             quantity: 1,
           }],
@@ -580,7 +583,7 @@ module.exports.checkinAtEvent = async (req, res, next) => {
           success_url: `${FRONTEND_URL}/events?checkin_success=true&eventId=${id}`,
           cancel_url: `${FRONTEND_URL}/events`,
           payment_intent_data: {
-            application_fee_amount: Math.round(globalTicketPrice * 0.70), // BaeQuest keeps 70%
+            application_fee_amount: Math.round(eventTicketPrice * 0.70), // BaeQuest keeps 70%
             transfer_data: { destination: eventCreator.stripeAccountId }, // remaining 30% to manager
           },
           metadata: {
