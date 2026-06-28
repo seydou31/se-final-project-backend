@@ -14,3 +14,7 @@ node_modules
 .idea
 .vscode
 .env
+*.code-workspace
+
+# Test coverage output
+coverage
