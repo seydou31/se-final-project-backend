@@ -14,6 +14,7 @@ const { decryptPhone } = require("../utils/crypto");
 const logger = require("../utils/logger");
 const { isS3Configured } = require("../middleware/multer");
 const { scheduleAutoCheckout } = require("../utils/checkoutScheduler");
+const { completeEventCheckin } = require("../services/eventCheckinService");
 
 const getStripe = () => Stripe(process.env.STRIPE_SECRET_KEY);
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://baequests.com";
@@ -143,6 +144,15 @@ module.exports.createEvent = async (req, res, next) => {
 
     // Reschedule checkout in case this event ends sooner than the current one
     scheduleAutoCheckout().catch(err => logger.error('Failed to reschedule checkout:', err));
+    
+    const io = req.app.get("io");
+
+    console.log("Socket io exists:", !!io);
+    console.log("Emitting event-created");
+
+    io.emit("event-created", {
+      eventId: event._id,
+    });
 
     res.status(201).json({
       message: "Event created successfully",
@@ -154,101 +164,304 @@ module.exports.createEvent = async (req, res, next) => {
 };
 
 // Get all upcoming/current events with optional filters and distance sort
-module.exports.getEvents = async (req, res, next) => {
+module.exports.getEvents = async (
+  req,
+  res,
+  next
+) => {
   try {
-    const { lat, lng, state, city, zipcode, dateFrom, dateTo } = req.query;
-    const userId = req.user._id;
-    const now = new Date();
+    const {
+      lat,
+      lng,
+      state,
+      city,
+      zipcode,
+      dateFrom,
+      dateTo,
+    } = req.query;
 
-    const query = { endTime: { $gte: now } };
+    const userId =
+      req.user._id.toString();
 
-    if (state) query.state = new RegExp(`^${escapeRegex(state)}$`, 'i');
-    if (city) query.city = new RegExp(`^${escapeRegex(city)}$`, 'i');
-    if (zipcode) query.zipcode = zipcode;
+    const query = {
+      endTime: { $gte: new Date() },
+    };
+
+    // filters
+    if (state) {
+      query.state = new RegExp(
+        `^${escapeRegex(state)}$`,
+        "i"
+      );
+    }
+
+    if (city) {
+      query.city = new RegExp(
+        `^${escapeRegex(city)}$`,
+        "i"
+      );
+    }
+
+    if (zipcode) {
+      query.zipcode = zipcode;
+    }
+
     if (dateFrom || dateTo) {
       query.startTime = {};
-      if (dateFrom) query.startTime.$gte = new Date(dateFrom);
-      if (dateTo) query.startTime.$lte = new Date(dateTo);
+
+      if (dateFrom) {
+        query.startTime.$gte =
+          new Date(dateFrom);
+      }
+
+      if (dateTo) {
+        query.startTime.$lte =
+          new Date(dateTo);
+      }
     }
 
-    let events;
-    const userLat = lat ? parseFloat(lat) : null;
-    const userLng = lng ? parseFloat(lng) : null;
+    const projection = {
+      name: 1,
+      address: 1,
+      city: 1,
+      state: 1,
+      zipcode: 1,
+      description: 1,
+      photo: 1,
+      link: 1,
+      location: 1,
+      startTime: 1,
+      endTime: 1,
+      usersGoing: 1,
+    };
 
-    if (city || state || zipcode) {
-      // Text search — return all matching events, no distance cap
-      events = await CuratedEvent.find(query).sort({ startTime: 1 }).lean();
-    } else if (userLat && userLng) {
-      // No text filter — use GPS, cap at 100 miles, closest 10
-      const pipeline = [
-        {
-          $geoNear: {
-            near: { type: "Point", coordinates: [userLng, userLat] },
-            distanceField: "distanceMeters",
-            maxDistance: 160934, // 100 miles in meters
-            spherical: true,
-            query,
+    let events = [];
+
+    // =====================================
+    // GEO SEARCH
+    // =====================================
+
+    if (
+      lat &&
+      lng &&
+      !city &&
+      !state &&
+      !zipcode
+    ) {
+      events =
+        await CuratedEvent.aggregate([
+          {
+            $geoNear: {
+              near: {
+                type: "Point",
+                coordinates: [
+                  parseFloat(lng),
+                  parseFloat(lat),
+                ],
+              },
+
+              distanceField:
+                "distanceMeters",
+
+              maxDistance: 160934,
+
+              spherical: true,
+
+              query,
+            },
           },
-        },
-        { $limit: 10 },
-      ];
-      events = await CuratedEvent.aggregate(pipeline);
-    } else {
-      events = await CuratedEvent.find(query).sort({ startTime: 1 }).limit(10).lean();
+
+          {
+            $project: {
+              ...projection,
+              distanceMeters: 1,
+            },
+          },
+
+          { $limit: 10 },
+        ]);
     }
 
-    // Get live presence counts (men/women) per event in one aggregation
-    const eventIds = events.map(e => e._id);
-    const presenceCounts = await profile.aggregate([
-      { $match: { 'location.eventId': { $in: eventIds } } },
-      {
-        $group: {
-          _id: '$location.eventId',
-          men: { $sum: { $cond: [{ $eq: ['$gender', 'male'] }, 1, 0] } },
-          women: { $sum: { $cond: [{ $eq: ['$gender', 'female'] }, 1, 0] } },
-        },
-      },
-    ]);
-    const presenceMap = Object.fromEntries(
-      presenceCounts.map(p => [p._id.toString(), p])
+    // =====================================
+    // NORMAL SEARCH
+    // =====================================
+
+    else {
+      events =
+        await CuratedEvent.find(
+          query,
+          projection
+        )
+          .sort({
+            startTime: 1,
+          })
+          .limit(
+            city ||
+              state ||
+              zipcode
+              ? 50
+              : 10
+          )
+          .lean();
+    }
+
+    if (!events.length) {
+      return res.json([]);
+    }
+
+    // =====================================
+    // LIVE PRESENCE
+    // =====================================
+
+    const eventIds = events.map(
+      (e) => e._id
     );
 
-    const result = events.map(event => {
-      const eventLng = event.location.coordinates[0];
-      const eventLat = event.location.coordinates[1];
-      const distanceKm = event.distanceMeters != null
-        ? (event.distanceMeters / 1000)
-        : null;
-      const presence = presenceMap[event._id?.toString()] || { men: 0, women: 0 };
+    const presence =
+      await profile.aggregate([
+        {
+          $match: {
+            "location.eventId": {
+              $in: eventIds,
+            },
+          },
+        },
 
-      return {
-        _id: event._id,
-        name: event.name,
-        address: event.address,
-        city: event.city,
-        state: event.state,
-        zipcode: event.zipcode,
-        description: event.description,
-        photo: event.photo,
-        link: event.link,
-        lat: eventLat,
-        lng: eventLng,
-        startTime: event.startTime,
-        endTime: event.endTime,
-        goingCount: event.usersGoing ? event.usersGoing.length : 0,
-        ticketPrice: parseInt(process.env.TICKET_PRICE || '0', 10),
-        liveMen: presence.men,
-        liveWomen: presence.women,
-        isUserGoing: event.usersGoing
-          ? event.usersGoing.some(id => id.toString() === userId.toString())
-          : false,
-        distanceKm,
-      };
-    });
+        {
+          $group: {
+            _id:
+              "$location.eventId",
 
-    res.status(200).json(result);
+            men: {
+              $sum: {
+                $cond: [
+                  {
+                    $eq: [
+                      "$gender",
+                      "male",
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+
+            women: {
+              $sum: {
+                $cond: [
+                  {
+                    $eq: [
+                      "$gender",
+                      "female",
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]);
+
+    const presenceMap =
+      Object.fromEntries(
+        presence.map((p) => [
+          p._id.toString(),
+          p,
+        ])
+      );
+
+    const ticketPrice = parseInt(
+      process.env.TICKET_PRICE ||
+        "0",
+      10
+    );
+
+    const result = events.map(
+      (event) => {
+        const presenceData =
+          presenceMap[
+            event._id.toString()
+          ] || {
+            men: 0,
+            women: 0,
+          };
+
+        const coords =
+          event.location
+            ?.coordinates || [];
+
+        return {
+          _id: event._id,
+
+          name: event.name,
+
+          address:
+            event.address,
+
+          city: event.city,
+
+          state: event.state,
+
+          zipcode:
+            event.zipcode,
+
+          description:
+            event.description,
+
+          photo: event.photo,
+
+          link: event.link,
+
+          lat: coords[1],
+
+          lng: coords[0],
+
+          startTime:
+            event.startTime,
+
+          endTime:
+            event.endTime,
+
+          goingCount:
+            event.usersGoing
+              ?.length || 0,
+
+          ticketPrice,
+
+          liveMen:
+            presenceData.men,
+
+          liveWomen:
+            presenceData.women,
+
+          isUserGoing:
+            event.usersGoing?.some(
+              (id) =>
+                id.toString() ===
+                userId
+            ) || false,
+
+          distanceKm:
+            event.distanceMeters
+              ? Number(
+                  (
+                    event.distanceMeters /
+                    1000
+                  ).toFixed(1)
+                )
+              : null,
+        };
+      }
+    );
+
+    return res
+      .status(200)
+      .json(result);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -270,9 +483,9 @@ module.exports.markAsGoing = async (req, res, next) => {
     }
     await event.save();
 
-    res.status(200).json({ isGoing: !isGoing, goingCount: event.usersGoing.length });
+    return res.status(200).json({ isGoing: !isGoing, goingCount: event.usersGoing.length });
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -285,7 +498,7 @@ module.exports.checkinAtEvent = async (req, res, next) => {
 
     if (!lat || !lng) throw new BadRequestError("Location coordinates are required to check in");
 
-    const event = await CuratedEvent.findById(id);
+    const event = await CuratedEvent.findById(id).lean();
     if (!event) throw new NotFoundError("Event not found");
 
     const now = new Date();
@@ -319,7 +532,38 @@ module.exports.checkinAtEvent = async (req, res, next) => {
     // If a global ticket price is set, redirect to Stripe Checkout
     const globalTicketPrice = parseInt(process.env.TICKET_PRICE || '0', 10);
     if (globalTicketPrice > 0 && event.createdBy) {
-      const eventCreator = await user.findById(event.createdBy);
+      // User already paid before for this event
+      const alreadyPaid =
+        event.checkedInUsers?.some(
+          (checkedInUserId) =>
+            String(checkedInUserId) === String(userId)
+        );
+
+      if (alreadyPaid) {
+        const io =
+          req.app.get("io");
+
+        const { compatibleUsers } = await completeEventCheckin({
+            userId,
+            event,
+            lat,
+            lng,
+            io,
+          });
+
+        return res.status(200).json({
+          message:
+            "Checked in successfully",
+          users: compatibleUsers,
+        });
+      }
+      
+      const eventCreator = await user
+                            .findById(event.createdBy)
+                            .select(
+                              "stripeOnboardingComplete stripeAccountId"
+                            )
+                            .lean();
       if (eventCreator?.stripeOnboardingComplete && eventCreator?.stripeAccountId) {
         const stripe = getStripe();
         const session = await stripe.checkout.sessions.create({
@@ -343,96 +587,91 @@ module.exports.checkinAtEvent = async (req, res, next) => {
             userId: userId.toString(),
             eventId: id,
             lat: lat.toString(),
-            lng: lng.toString(),
+            lng: lng.toString()
           },
         });
         return res.json({ requiresPayment: true, checkoutUrl: session.url });
       }
     }
 
-    // If user is already checked into a different event, clear that presence first
-    const existingPresence = await profile.findOne({ owner: userId, 'location.eventId': { $exists: true, $ne: null } });
-    if (existingPresence?.location?.eventId && String(existingPresence.location.eventId) !== String(id)) {
-      const io = req.app.get("io");
-      io.to(`event_${existingPresence.location.eventId}`).emit("user-checked-out", {
-        userId,
-        eventId: existingPresence.location.eventId,
-      });
-    }
+    // ============================================
+    // FREE EVENT FLOW
+    // ============================================
 
-    // Atomically add user to checkedInUsers (prevents race condition duplicates)
-    await CuratedEvent.findByIdAndUpdate(id, { $addToSet: { checkedInUsers: userId } });
-
-    // Update profile location and capture the result (avoids a second DB fetch)
-    const currentUserProfile = await profile.findOneAndUpdate(
-      { owner: userId },
-      { location: { eventId: event._id, lat: parseFloat(lat), lng: parseFloat(lng), updatedAt: new Date() } },
-      { new: true }
+    await CuratedEvent.updateOne(
+      { _id: id },
+      {
+        $addToSet: {
+          checkedInUsers:
+            userId,
+        },
+      }
     );
 
-    if (!currentUserProfile) throw new NotFoundError("Profile not found");
+    const io =
+      req.app.get("io");
 
-    const { gender: userGender, sexualOrientation } = currentUserProfile;
+    const {
+      currentUserProfile,
+      compatibleUsers,
+    } =
+      await completeEventCheckin({
+        userId,
+        event,
+        lat,
+        lng,
+        io,
+      });
 
-    const genderFilter = {};
-    if (sexualOrientation === 'straight') {
-      genderFilter.gender = userGender === 'male' ? 'female' : 'male';
-    } else if (sexualOrientation === 'gay') {
-      genderFilter.gender = userGender;
-    }
-
-    // Emit socket event
-    const io = req.app.get("io");
-    io.to(`event_${id}`).emit("user-checked-in", { user: currentUserProfile, eventId: id });
-
-    // Fire-and-forget SMS to compatible users already at this event
-    (async () => {
+    // ============================================
+    // SMS BACKGROUND TASK
+    // ============================================
+    process.nextTick(async () => {
       try {
-        const targets = await profile.find({
-          'location.eventId': event._id,
-          owner: { $ne: userId },
-          ...genderFilter,
-        }).select('phoneNumber sexualOrientation gender');
-
-        const compatible = targets.filter(u => {
-          if (!u.phoneNumber) return false;
-          return sexualOrientation === 'bisexual' || u.sexualOrientation === 'bisexual'
-            || (u.sexualOrientation === 'straight' && u.gender !== userGender)
-            || (u.sexualOrientation === 'gay' && u.gender === userGender);
-        });
+        const smsTargets =
+          compatibleUsers.filter(
+            (u) => u.phoneNumber
+          );
 
         await Promise.allSettled(
-          compatible.map(u => {
-            let phone;
-            try { phone = decryptPhone(u.phoneNumber); } catch (e) {
-              logger.warn(`Failed to decrypt phone for user ${u._id}, skipping SMS`);
-              return Promise.resolve();
+          smsTargets.map(async (u) => {
+            try {
+              const phone =
+                decryptPhone(
+                  u.phoneNumber
+                );
+              console.log("send notification");
+              return sendCheckinNotification(
+                phone,
+                currentUserProfile.name,
+                event.name
+              );
+            } catch (err) {
+              logger.warn(
+                "SMS decrypt failed"
+              );
+              return null;
             }
-            return sendCheckinNotification(phone, currentUserProfile.name, event.name);
           })
         );
       } catch (err) {
-        logger.error('Failed to send SMS check-in notifications:', err);
+        logger.error(
+          "SMS notification failed",
+          err
+        );
       }
-    })().catch(err => logger.error('Unhandled SMS IIFE rejection:', err));
-
-    // Return compatible users currently present at this event (by live location, not revenue list)
-    const allCheckedIn = await profile.find({
-      'location.eventId': event._id,
-      owner: { $ne: userId },
-      ...genderFilter,
-    }).select("name age gender profession bio interests convoStarter profilePicture sexualOrientation owner");
-
-    const compatibleUsers = allCheckedIn.filter(u => {
-      if (sexualOrientation === 'bisexual') return true;
-      if (u.sexualOrientation === 'bisexual') return true;
-      if (u.sexualOrientation === 'straight') return u.gender !== userGender;
-      if (u.sexualOrientation === 'gay') return u.gender === userGender;
-      return false;
     });
 
-    logger.info(`User ${userId} checked in at event ${id}`);
-    return res.status(200).json({ message: "Checked in successfully", users: compatibleUsers });
+    logger.info(
+      `User ${userId} checked in at event ${id}`
+    );
+
+    return res.status(200).json({
+      message:
+        "Checked in successfully",
+
+      users: compatibleUsers,
+    });
   } catch (err) {
     return next(err);
   }
@@ -606,5 +845,39 @@ module.exports.heartbeat = async (req, res, next) => {
     return res.status(200).json({ message: 'ok' });
   } catch (err) {
     return next(err);
+  }
+};
+
+// Get check-in status for an event
+module.exports.getCheckinStatus = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const eventId = req.params.id;
+    const userId = req.user._id;
+
+    const userProfile =
+      await profile
+        .findOne({
+          owner: userId,
+        })
+        .select(
+          "location.eventId"
+        )
+        .lean();
+
+    const checkedIn =
+      String(
+        userProfile?.location
+          ?.eventId
+      ) === String(eventId);
+
+    res.json({
+      checkedIn,
+    });
+  } catch (err) {
+    next(err);
   }
 };

@@ -14,6 +14,7 @@ if (process.env.SENTRY_DSN) {
   });
 }
 
+const path = require('path');
 const http = require("http");
 const cors = require("cors");
 const express = require("express");
@@ -41,8 +42,8 @@ const { PORT = 3001 } = process.env;
 
 const isProduction = process.env.NODE_ENV === 'production';
 const allowedOrigins = isProduction
-  ? ["https://baequests.com"]
-  : ["https://baequests.com", "http://localhost:3000", "http://localhost:5173"];
+  ? ["https://baequests.com", "https://baequest.cwsdev1.com"]
+  : ["https://baequests.com", "https://baequest.cwsdev1.com", "http://localhost:3000", "http://localhost:5173"];
 
 const app = express();
 app.set('trust proxy', 1);
@@ -61,10 +62,12 @@ io.use((socket, next) => {
   const cookieHeader = socket.handshake.headers.cookie || '';
   const jwtMatch = cookieHeader.split(';').find(c => c.trim().startsWith('jwt='));
   const token = jwtMatch ? jwtMatch.trim().slice(4) : null;
-  if (!token) return next(new Error('Authentication required'));
+  if (!token) {
+    return next(new Error('Authentication required'));
+  }
   try {
     // eslint-disable-next-line no-param-reassign
-    socket.user = jwt.verify(token, SECRET.JWT_SECRET);
+    socket.data.user = jwt.verify(token, SECRET.JWT_SECRET);
     return next();
   } catch {
     return next(new Error('Invalid token'));
@@ -74,29 +77,216 @@ io.use((socket, next) => {
 app.set("io", io);
 
 io.on("connection", (socket) => {
-  logger.info(`✅ User connected: ${socket.id}`);
-  logger.info(`Total connected clients: ${io.engine.clientsCount}`);
+  logger.info(`User connected: ${socket.id}`);
+  logger.info(`Total clients: ${io.engine.clientsCount}`);
 
-  socket.on("join-event", ({ eventId }) => {
-    socket.join(`event_${eventId}`);
-    logger.info(`${socket.id} joined room event_${eventId}`);
+  // =============================
+  // HELPER: SEND ERROR
+  // =============================
+  const sendError = (code, message, callback) => {
+    const error = { code, message };
+
+    // ACK response
+    if (callback) {
+      callback({ status: "error", ...error });
+    }
+
+    // ALSO emit for global listener (frontend)
+    socket.emit("error", error);
+  };
+
+  // =============================
+  // JOIN EVENT
+  // =============================
+  socket.on("join-event", (payload, callback) => {
+  const { eventId } = payload || {};
+    try {
+      if (!eventId) {
+        return sendError("INVALID_EVENT_ID", "eventId is required", callback);
+      }
+
+      const room = `event_${eventId}`;
+
+      if (!socket.rooms.has(room)) {
+        socket.join(room);
+        logger.info(`${socket.id} joined ${room}`);
+      }
+
+      /* eslint-disable no-param-reassign */
+      socket.data.eventId = eventId;
+      /* eslint-enable no-param-reassign */
+
+      if (callback) {
+        callback({ status: "ok", eventId });
+      }
+
+      socket.to(room).emit("user-joined", {
+        socketId: socket.id,
+        eventId,
+      });
+
+      return null;
+
+    } catch (err) {
+      logger.error(`join-event error: ${err.message}`);
+      return sendError("JOIN_FAILED", "Failed to join event", callback);
+    }
   });
 
-  socket.on("leave-event", ({ eventId }) => {
-    socket.leave(`event_${eventId}`);
-    logger.info(`${socket.id} left room event_${eventId}`);
+  // =============================
+  // LEAVE EVENT
+  // =============================
+  socket.on("leave-event", (payload, callback) => {
+  const { eventId } = payload || {};
+    try {
+      if (!eventId) {
+        return sendError("INVALID_EVENT_ID", "eventId is required", callback);
+      }
+
+      const room = `event_${eventId}`;
+
+      if (socket.rooms.has(room)) {
+        socket.leave(room);
+        logger.info(`${socket.id} left ${room}`);
+      }
+
+      socket.to(room).emit("user-left", {
+        socketId: socket.id,
+        eventId,
+      });
+
+      /* eslint-disable no-param-reassign */
+      socket.data.eventId = null;
+      /* eslint-enable no-param-reassign */
+
+      if (callback) {
+        callback({ status: "ok", eventId });
+      }
+      return null;
+
+    } catch (err) {
+      logger.error(`leave-event error: ${err.message}`);
+      return sendError("LEAVE_FAILED", "Failed to leave event", callback);
+    }
   });
 
-  socket.on("disconnect", () => {
-    logger.info(`❌ User disconnected: ${socket.id}`);
-    logger.info(`Total connected clients: ${io.engine.clientsCount}`);
+  // =============================
+  // DISCONNECTING
+  // =============================
+  socket.on("disconnecting", () => {
+    try {
+      [...socket.rooms]
+        .filter((room) => room !== socket.id)
+        .forEach((room) => {
+          const eventId = room.replace("event_", "");
+
+          logger.info(`${socket.id} leaving ${room}`);
+
+          socket.to(room).emit("user-left", {
+            socketId: socket.id,
+            eventId,
+          });
+        });
+    } catch (err) {
+      logger.error(`disconnecting error: ${err.message}`);
+    }
+  });
+
+  // =============================
+  // DISCONNECT
+  // =============================
+  socket.on("disconnect", (reason) => {
+    logger.info(`Disconnected: ${socket.id} | ${reason}`);
+    logger.info(`Total clients: ${io.engine.clientsCount}`);
+  });
+
+  // =============================
+  // INTERNAL ERROR LOGGING
+  // =============================
+  socket.on("error", (err) => {
+    logger.error(`Socket error (${socket.id}):`, err);
   });
 });
 
 
 
-app.use(helmet());
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "https://js.stripe.com",
+        "https://accounts.google.com",
+        "https://apis.google.com",
+        "https://www.googletagmanager.com",
+        "https://www.google-analytics.com"
+      ],
+
+      frameSrc: [
+        "'self'",
+        "https://js.stripe.com",
+        "https://hooks.stripe.com",
+        "https://accounts.google.com"
+      ],
+
+      connectSrc: [
+        "'self'",
+        "https://api.stripe.com",
+
+        // Socket.IO (VERY IMPORTANT)
+        "https://api.baequests.com",
+        "wss://api.baequests.com",
+        "http://localhost:3001",
+        "ws://localhost:3001",
+
+        // Analytics
+        "https://www.google-analytics.com",
+        "https://www.googletagmanager.com"
+      ],
+
+      imgSrc: [
+        "'self'",
+        "data:",
+        "https://*.googleusercontent.com",
+        "https://lh3.googleusercontent.com",
+        "https://baequests-profile-pictures.s3.us-east-2.amazonaws.com",
+        "https://www.googletagmanager.com"
+      ],
+
+      styleSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "https://fonts.googleapis.com"
+      ],
+
+      fontSrc: [
+        "'self'",
+        "https://fonts.gstatic.com"
+      ]
+    }
+  }
+}));
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
+
 app.use(cookieParser());
 app.use(requestLogger);
 
@@ -110,11 +300,31 @@ const limiter = rateLimit({
 app.use(limiter);
 // Stripe webhook needs raw body — must be before express.json()
 app.use('/stripe/webhook', express.raw({ type: 'application/json' }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({
+  limit: '50mb'
+}));
+
+app.use(express.urlencoded({
+  extended: true,
+  limit: '50mb'
+}));
 
 // Serve uploaded images publicly (event photos and profile pictures are shown to all users)
-app.use('/uploads', express.static('uploads'));
+// app.use('/uploads', express.static('uploads'));
+// Fix for image loading (CORP issue)
+app.use('/uploads', (req, res, next) => {
+  next();
+}, express.static(path.join(__dirname, 'uploads')));
+
+// Google login fix for CORP issue when Google tries to load profile picture
+app.use('/google-profile-pictures', (req, res, next) => {
+  next();
+}, express.static(path.join(__dirname, 'google-profile-pictures')));
+
+app.use((req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  next();
+});
 
 app.use("/", mainRoute);
 

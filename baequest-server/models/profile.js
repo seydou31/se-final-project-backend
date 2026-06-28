@@ -89,4 +89,31 @@ const profile = new mongoose.Schema({
   },
 });
 
+/**
+ * =========================================
+ * INDEXES
+ * =========================================
+ */
+// Fast lookup for live event users
+profile.index({
+  "location.eventId": 1,
+});
+
+// Fast compatibility filtering
+profile.index({
+  "location.eventId": 1,
+  gender: 1,
+  sexualOrientation: 1,
+});
+
+// Fast owner lookup during check-in
+profile.index({
+  owner: 1,
+});
+
+// Optional cleanup / stale presence jobs
+profile.index({
+  "location.updatedAt": 1,
+});
+
 module.exports = mongoose.model("profile", profile);

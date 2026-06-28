@@ -10,6 +10,10 @@ const resend = new Resend(process.env.RESEND_API_KEY);
  */
 const sendPasswordResetEmail = async (email, resetUrl) => {
   try {
+    if (!resend) {
+      console.log('📧 Email skipped (no API key)');
+      return;
+    }
     await resend.emails.send({
       from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
       to: email,
@@ -100,6 +104,10 @@ const sendPasswordResetEmail = async (email, resetUrl) => {
  */
 const sendVerificationEmail = async (email, verificationUrl) => {
   try {
+    if (!resend) {
+      console.log('📧 Email skipped (no API key)');
+      return;
+    }
     await resend.emails.send({
       from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
       to: email,
@@ -191,6 +199,10 @@ const sendVerificationEmail = async (email, verificationUrl) => {
  */
 const sendFeedbackRequestEmail = async (email, feedbackUrl, eventDetails) => {
   try {
+    if (!resend) {
+      console.log('📧 Email skipped (no API key)');
+      return;
+    }
     await resend.emails.send({
       from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
       to: email,
@@ -338,7 +350,6 @@ const sendFeedbackRequestEmail = async (email, feedbackUrl, eventDetails) => {
       `,
     });
 
-    return true;
   } catch (error) {
     console.error('Failed to send feedback email:', error);
     throw new Error('Failed to send feedback request email');
@@ -352,6 +363,10 @@ const sendFeedbackRequestEmail = async (email, feedbackUrl, eventDetails) => {
 const sendWelcomeEmail = async (email) => {
   try {
     const appUrl = process.env.FRONTEND_URL || 'https://baequests.com';
+    if (!resend) {
+      console.log('📧 Email skipped (no API key)');
+      return;
+    }
     await resend.emails.send({
       from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
       to: email,
