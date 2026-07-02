@@ -47,39 +47,52 @@ module.exports.getAdminOverview = async (req, res, next) => {
     // Total regular app users (anyone who isn't an event manager)
     const totalUsers = await User.countDocuments({ role: { $ne: 'eventManager' } });
 
-    // IDs of all regular (non-manager) users — used to scope profile queries
-    const regularUserIds = await User.find({ role: { $ne: 'eventManager' } }).distinct('_id');
-
-    // User insight queries — run in parallel for speed
+    // User insight queries — all done inside MongoDB via $lookup, no IDs in Node memory
     const [
-      totalProfiles,
+      totalProfilesResult,
       verifiedUsers,
-      liveNow,
+      liveNowResult,
       engagedResult,
       genderResult,
     ] = await Promise.all([
-      // Users who completed their profile (excluding event manager profiles)
-      Profile.countDocuments({ owner: { $in: regularUserIds } }),
+      // Profiles owned by non-manager users
+      Profile.aggregate([
+        { $lookup: { from: 'users', localField: 'owner', foreignField: '_id', as: 'user' } },
+        { $unwind: '$user' },
+        { $match: { 'user.role': { $ne: 'eventManager' } } },
+        { $count: 'total' },
+      ]),
 
       // Users who verified their email
       User.countDocuments({ role: { $ne: 'eventManager' }, isEmailVerified: true }),
 
-      // Users currently checked into an event right now (regular users only)
-      Profile.countDocuments({ owner: { $in: regularUserIds }, 'location.eventId': { $exists: true, $ne: null } }),
+      // Users currently checked into an event (non-managers only)
+      Profile.aggregate([
+        { $match: { 'location.eventId': { $exists: true, $ne: null } } },
+        { $lookup: { from: 'users', localField: 'owner', foreignField: '_id', as: 'user' } },
+        { $unwind: '$user' },
+        { $match: { 'user.role': { $ne: 'eventManager' } } },
+        { $count: 'total' },
+      ]),
 
-      // Distinct users who have checked in at least once (across all events)
+      // Distinct users who have checked in at least once
       CuratedEvent.aggregate([
         { $unwind: '$checkedInUsers' },
         { $group: { _id: '$checkedInUsers' } },
         { $count: 'total' },
       ]),
 
-      // Gender split across regular user profiles only
+      // Gender split — non-manager profiles only
       Profile.aggregate([
-        { $match: { owner: { $in: regularUserIds } } },
+        { $lookup: { from: 'users', localField: 'owner', foreignField: '_id', as: 'user' } },
+        { $unwind: '$user' },
+        { $match: { 'user.role': { $ne: 'eventManager' } } },
         { $group: { _id: '$gender', count: { $sum: 1 } } },
       ]),
     ]);
+
+    const totalProfiles = totalProfilesResult[0]?.total || 0;
+    const liveNow = liveNowResult[0]?.total || 0;
 
     // Paginated managers
     const managers = await User.find(query)
