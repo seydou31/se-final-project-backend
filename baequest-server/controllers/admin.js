@@ -47,6 +47,9 @@ module.exports.getAdminOverview = async (req, res, next) => {
     // Total regular app users (anyone who isn't an event manager)
     const totalUsers = await User.countDocuments({ role: { $ne: 'eventManager' } });
 
+    // IDs of all regular (non-manager) users — used to scope profile queries
+    const regularUserIds = await User.find({ role: { $ne: 'eventManager' } }).distinct('_id');
+
     // User insight queries — run in parallel for speed
     const [
       totalProfiles,
@@ -55,14 +58,14 @@ module.exports.getAdminOverview = async (req, res, next) => {
       engagedResult,
       genderResult,
     ] = await Promise.all([
-      // Users who completed their profile
-      Profile.countDocuments(),
+      // Users who completed their profile (excluding event manager profiles)
+      Profile.countDocuments({ owner: { $in: regularUserIds } }),
 
       // Users who verified their email
       User.countDocuments({ role: { $ne: 'eventManager' }, isEmailVerified: true }),
 
-      // Users currently checked into an event right now
-      Profile.countDocuments({ 'location.eventId': { $exists: true, $ne: null } }),
+      // Users currently checked into an event right now (regular users only)
+      Profile.countDocuments({ owner: { $in: regularUserIds }, 'location.eventId': { $exists: true, $ne: null } }),
 
       // Distinct users who have checked in at least once (across all events)
       CuratedEvent.aggregate([
@@ -71,8 +74,9 @@ module.exports.getAdminOverview = async (req, res, next) => {
         { $count: 'total' },
       ]),
 
-      // Gender split across all profiles
+      // Gender split across regular user profiles only
       Profile.aggregate([
+        { $match: { owner: { $in: regularUserIds } } },
         { $group: { _id: '$gender', count: { $sum: 1 } } },
       ]),
     ]);
