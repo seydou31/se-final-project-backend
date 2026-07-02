@@ -1,5 +1,7 @@
+const mongoose = require('mongoose');
 const User = require('../models/user');
 const CuratedEvent = require('../models/curatedEvent');
+const Profile = require('../models/profile');
 const logger = require('../utils/logger');
 
 const MANAGER_SHARE = 0.30;
@@ -41,6 +43,39 @@ module.exports.getAdminOverview = async (req, res, next) => {
 
     // Total managers count
     const totalManagers = await User.countDocuments(query);
+
+    // Total regular app users (anyone who isn't an event manager)
+    const totalUsers = await User.countDocuments({ role: { $ne: 'eventManager' } });
+
+    // User insight queries — run in parallel for speed
+    const [
+      totalProfiles,
+      verifiedUsers,
+      liveNow,
+      engagedResult,
+      genderResult,
+    ] = await Promise.all([
+      // Users who completed their profile
+      Profile.countDocuments(),
+
+      // Users who verified their email
+      User.countDocuments({ role: { $ne: 'eventManager' }, isEmailVerified: true }),
+
+      // Users currently checked into an event right now
+      Profile.countDocuments({ 'location.eventId': { $exists: true, $ne: null } }),
+
+      // Distinct users who have checked in at least once (across all events)
+      CuratedEvent.aggregate([
+        { $unwind: '$checkedInUsers' },
+        { $group: { _id: '$checkedInUsers' } },
+        { $count: 'total' },
+      ]),
+
+      // Gender split across all profiles
+      Profile.aggregate([
+        { $group: { _id: '$gender', count: { $sum: 1 } } },
+      ]),
+    ]);
 
     // Paginated managers
     const managers = await User.find(query)
@@ -124,14 +159,18 @@ module.exports.getAdminOverview = async (req, res, next) => {
      * ─────────────────────────────────────────
      */
 
-    // Overall events count
-    const totalEvents = await CuratedEvent.countDocuments();
+    // Events created by a manager (excludes legacy/seed events with no createdBy)
+    const totalEvents = await CuratedEvent.countDocuments({ createdBy: { $exists: true, $ne: null } });
 
-    // Total earnings aggregation
-    const earningsResult = await CuratedEvent.aggregate([
+    // Total check-ins + earnings aggregation
+    const globalResult = await CuratedEvent.aggregate([
       {
         $group: {
           _id: null,
+
+          totalCheckins: {
+            $sum: { $size: '$checkedInUsers' },
+          },
 
           totalEarningsCents: {
             $sum: {
@@ -142,8 +181,9 @@ module.exports.getAdminOverview = async (req, res, next) => {
       },
     ]);
 
+    const totalCheckins = globalResult[0]?.totalCheckins || 0;
     const totalEarnings =
-      (earningsResult[0]?.totalEarningsCents || 0) / 100 *
+      (globalResult[0]?.totalEarningsCents || 0) / 100 *
       MANAGER_SHARE;
 
     return res.status(200).json({
@@ -157,12 +197,24 @@ module.exports.getAdminOverview = async (req, res, next) => {
       },
 
       stats: {
+        totalUsers,
         totalManagers,
         totalEvents,
+        totalCheckins,
+        totalEarnings: parseFloat(totalEarnings.toFixed(2)),
 
-        totalEarnings: parseFloat(
-          totalEarnings.toFixed(2)
-        ),
+        userInsights: {
+          profileCompletion: totalUsers > 0
+            ? Math.round((totalProfiles / totalUsers) * 100)
+            : 0,
+          verifiedUsers,
+          liveNow,
+          engagedUsers: engagedResult[0]?.total || 0,
+          genderSplit: {
+            male:   genderResult.find(g => g._id === 'male')?.count   || 0,
+            female: genderResult.find(g => g._id === 'female')?.count || 0,
+          },
+        },
       },
     });
   } catch (err) {
@@ -194,7 +246,7 @@ module.exports.getAdminManagerEvents = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     const query = {
-      createdBy: managerId,
+      createdBy: new mongoose.Types.ObjectId(managerId),
     };
 
     // Search filter
@@ -221,12 +273,51 @@ module.exports.getAdminManagerEvents = async (req, res, next) => {
     // Total events count
     const total = await CuratedEvent.countDocuments(query);
 
-    // Paginated events
-    const events = await CuratedEvent.find(query)
-      .sort({ startTime: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    // Paginated events with gender split via profile lookup
+    const events = await CuratedEvent.aggregate([
+      { $match: query },
+      { $sort: { startTime: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'profiles',
+          localField: 'checkedInUsers',
+          foreignField: 'owner',
+          as: 'attendeeProfiles',
+        },
+      },
+      {
+        $project: {
+          name: 1,
+          startTime: 1,
+          endTime: 1,
+          city: 1,
+          state: 1,
+          paidCheckinCount: 1,
+          ticketPrice: 1,
+          totalCheckins: { $size: '$checkedInUsers' },
+          genderSplit: {
+            male: {
+              $size: {
+                $filter: {
+                  input: '$attendeeProfiles',
+                  cond: { $eq: ['$$this.gender', 'male'] },
+                },
+              },
+            },
+            female: {
+              $size: {
+                $filter: {
+                  input: '$attendeeProfiles',
+                  cond: { $eq: ['$$this.gender', 'female'] },
+                },
+              },
+            },
+          },
+        },
+      },
+    ]);
 
     const data = events.map((event) => {
       const earnings =
@@ -241,13 +332,10 @@ module.exports.getAdminManagerEvents = async (req, res, next) => {
         endTime: event.endTime,
         city: event.city,
         state: event.state,
-
-        paidCheckinCount:
-          event.paidCheckinCount || 0,
-
-        earnings: parseFloat(
-          earnings.toFixed(2)
-        ),
+        paidCheckinCount: event.paidCheckinCount || 0,
+        totalCheckins: event.totalCheckins || 0,
+        genderSplit: event.genderSplit || { male: 0, female: 0 },
+        earnings: parseFloat(earnings.toFixed(2)),
       };
     });
 
