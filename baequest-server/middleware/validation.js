@@ -236,7 +236,7 @@ const createEventSchema = Joi.object({
   }),
   ticketPrice: Joi.number().integer().min(0).optional().messages({
     "number.min": "Ticket price cannot be negative",
-    "number.integer": "Ticket price must be a whole number of cents",
+    "number.integer": "Ticket price must be a whole number of cents (e.g. 300 = $3.00)",
   }),
 });
 

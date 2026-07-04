@@ -89,6 +89,11 @@ module.exports.createEvent = async (req, res, next) => {
     // ticketPrice is validated upstream (createEventSchema) as a non-negative integer number of cents
     const ticketPriceCents = ticketPrice != null ? ticketPrice : 0;
 
+    // Paid events must be at least $3.00 (300 cents)
+    if (ticketPriceCents > 0 && ticketPriceCents < 300) {
+      throw new BadRequestError("Ticket price must be at least $3.00.");
+    }
+
     // Only paid events require a connected Stripe account to receive payouts
     if (ticketPriceCents > 0 && (!req.user.stripeOnboardingComplete || !req.user.stripeAccountId)) {
       throw new BadRequestError("You must connect your Stripe account before creating a paid event.");
