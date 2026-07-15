@@ -51,9 +51,9 @@ router.post('/report/:reportedUserId', auth, async (req, res) => {
       reason,
     });
 
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to submit report' });
+    return res.status(500).json({ error: 'Failed to submit report' });
   }
 });
 
