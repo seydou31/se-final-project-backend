@@ -468,9 +468,30 @@ const sendWelcomeEmail = async (email) => {
   }
 };
 
+const sendUserReportEmail = async ({ reporterName, reporterEmail, reportedName, reportedId, reason }) => {
+  try {
+    if (!resend) return;
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
+      to: 'support@baequests.com',
+      subject: `User Report: ${reportedName}`,
+      html: `
+        <h2>User Report Submitted</h2>
+        <p><strong>Reported user:</strong> ${reportedName} (ID: ${reportedId})</p>
+        <p><strong>Reason:</strong> ${reason}</p>
+        <p><strong>Reported by:</strong> ${reporterName} (${reporterEmail})</p>
+        <p><strong>Time:</strong> ${new Date().toUTCString()}</p>
+      `,
+    });
+  } catch (error) {
+    console.error('Report email error:', error);
+  }
+};
+
 module.exports = {
   sendPasswordResetEmail,
   sendVerificationEmail,
   sendFeedbackRequestEmail,
   sendWelcomeEmail,
+  sendUserReportEmail,
 };
