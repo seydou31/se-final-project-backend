@@ -12,7 +12,7 @@
 const API_BASE = "https://api.baequests.com";
 
 // ── Fill these in before running ────────────────────────────────────────────
-const EVENT_ID = "6a43edd57bcf6ceaea582cfb"; // "home Test", free, 2026-06-30 16:30-19:24 UTC
+const EVENT_ID = "6a4ae37e3090c03727d6d020"; // "Real test", free, 2026-07-05 23:09-23:15 UTC
 const EVENT_LAT = 38.9871349;
 const EVENT_LNG = -76.9771568;
 const MY_EMAIL_LOCAL = "simuser";       // any unique-per-run string works, e.g. "simuser"
@@ -70,6 +70,24 @@ async function createProfile(cookie, index) {
   if (!res.ok) throw new Error(`profile creation failed (${res.status}): ${await res.text()}`);
 }
 
+async function uploadPhoto(cookie, index) {
+  try {
+    // Each index gets a unique photo from picsum.photos
+    const photoRes = await fetch(`https://picsum.photos/seed/${RUN_TAG + index}/400/400`);
+    if (!photoRes.ok) return;
+    const blob = await photoRes.blob();
+    const formData = new FormData();
+    formData.append("profilePicture", blob, `photo${index}.jpg`);
+    await fetch(`${API_BASE}/users/profile/picture`, {
+      method: "POST",
+      headers: { Cookie: cookie },
+      body: formData,
+    });
+  } catch {
+    // Photo upload is best-effort — profile still works without it
+  }
+}
+
 async function checkin(cookie, index) {
   const res = await fetch(`${API_BASE}/events/${EVENT_ID}/checkin`, {
     method: "POST",
@@ -93,6 +111,9 @@ async function run() {
 
     process.stdout.write("profile... ");
     await createProfile(cookie, i);
+
+    process.stdout.write("photo... ");
+    await uploadPhoto(cookie, i);
 
     process.stdout.write("checking in... ");
     const result = await checkin(cookie, i);
